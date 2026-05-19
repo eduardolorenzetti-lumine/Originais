@@ -596,7 +596,7 @@ export class RunnerScene extends Phaser.Scene {
       this.currentSpeed = Phaser.Math.Linear(this.currentSpeed, 110, 0.12);
       if (this.memorySlowdownTimer === 0) {
         this.inChurchMoment = false;
-        this.invulnerable = this.completedRecordings >= this.powerupTarget;
+        this.invulnerable = false;
         this.hideAddonDbox();
       }
     } else if (this.endingRun) {

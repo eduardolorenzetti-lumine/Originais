@@ -1,13 +1,13 @@
-# Carlo Acutis Game - Implementacao Web
+# Carlo Acutis Game - Implementacao Web V2
 
-Esta pasta contem a versao web completa do jogo.
+Esta pasta contem a versao web completa do jogo base atualizado.
 
 ## Arquivos que devem ser enviados ao servidor
 
-Envie a pasta `Web` inteira para o servidor, mantendo esta estrutura:
+Envie a pasta `WebV2` inteira para o servidor, mantendo esta estrutura:
 
 ```text
-Web/
+WebV2/
   index.html
   configuracao.js
   assets/
@@ -44,7 +44,7 @@ Essa URL sera aberta quando o jogador finalizar o jogo.
 
 ## Forma recomendada de implementar em uma pagina ja existente
 
-Hospede a pasta `Web` em uma URL propria, por exemplo:
+Hospede a pasta `WebV2` em uma URL propria, por exemplo:
 
 ```text
 https://seudominio.com/carlo-game/
