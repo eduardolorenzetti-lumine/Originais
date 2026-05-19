@@ -6854,16 +6854,14 @@ function mergeConcurrentState(baseState, localState, remoteState, auditEntries =
 
 function mergeLocalAndRemoteState(localState, remoteState) {
   if (!remoteState) return localState;
-  const localProjects = Array.isArray(localState?.projects) ? localState.projects : [];
-  const remoteProjects = Array.isArray(remoteState?.projects) ? remoteState.projects : [];
 
-  const primary = remoteProjects.length >= localProjects.length ? remoteState : localState;
-  const secondary = primary === remoteState ? localState : remoteState;
-
+  // O estado remoto (Supabase) é sempre a fonte de verdade na hidratação.
+  // Alterações locais não confirmadas são descartadas em favor do estado sincronizado.
+  // Apenas usuários e logs de auditoria são mesclados para preservar dados de ambos os lados.
   return {
-    ...primary,
-    users: mergeUsersByEmail(primary.users || [], secondary.users || []),
-    auditLogs: appendAuditLogs(primary.auditLogs || [], secondary.auditLogs || [])
+    ...remoteState,
+    users: mergeUsersByEmail(remoteState.users || [], localState.users || []),
+    auditLogs: appendAuditLogs(remoteState.auditLogs || [], localState.auditLogs || [])
   };
 }
 
