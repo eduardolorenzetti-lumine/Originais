@@ -158,6 +158,10 @@ body {
   background: var(--bg);
 }
 
+.login-view[hidden] {
+  display: none !important;
+}
+
 .login-card {
   width: min(420px, 96vw);
   background: var(--surface);
