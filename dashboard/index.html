@@ -25,6 +25,33 @@
     <div class="auth-loading-spinner" aria-label="Carregando..."></div>
   </div>
 
+  <section id="recoveryView" class="login-view" hidden>
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="logo-mark" aria-hidden="true">
+          <span class="logo-l">L</span>
+          <span class="logo-point"></span>
+        </div>
+        <div>
+          <strong>ORIGINAIS</strong>
+          <small>LUMINE</small>
+        </div>
+      </div>
+      <form id="recoveryForm" class="login-form" autocomplete="off">
+        <h3 style="margin:0 0 4px;font-size:1rem;">Redefinir senha</h3>
+        <p style="margin:0 0 16px;font-size:0.85rem;color:var(--text-2)">Crie uma nova senha para sua conta.</p>
+        <label>Nova senha
+          <input id="recoveryPassword" type="password" required minlength="6" autocomplete="new-password" placeholder="Mínimo 6 caracteres" />
+        </label>
+        <label>Confirmar nova senha
+          <input id="recoveryPasswordConfirm" type="password" required minlength="6" autocomplete="new-password" />
+        </label>
+        <p id="recoveryError" class="login-error" hidden></p>
+        <button type="submit" class="btn accent">Salvar nova senha</button>
+      </form>
+    </div>
+  </section>
+
   <section id="loginView" class="login-view" hidden>
     <div class="login-card">
       <a href="#" class="login-brand brand-link" data-go-home>

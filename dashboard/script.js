@@ -153,6 +153,7 @@ let secureUsersLoaded = false;
 let supabaseLogoutInProgress = false;
 let supabaseAuthReady = false; // true após initializeSupabaseAuth concluir
 let remotePasswordPromptInProgress = false;
+let recoveryMode = false; // true quando usuário chegou via link de redefinição de senha
 let currentThemePreference = "system";
 let systemThemeMediaQuery = null;
 let pendingGanttMeasureRetry = false;
@@ -737,6 +738,53 @@ function bindGanttDelegatedInteractions() {
 }
 
 function bindAuthActions() {
+  // Formulário de redefinição de senha (tela recovery)
+  const recoveryForm = document.getElementById("recoveryForm");
+  const recoveryError = document.getElementById("recoveryError");
+  if (recoveryForm) {
+    recoveryForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const pwd = document.getElementById("recoveryPassword").value;
+      const confirm = document.getElementById("recoveryPasswordConfirm").value;
+      if (recoveryError) recoveryError.hidden = true;
+
+      if (pwd !== confirm) {
+        if (recoveryError) { recoveryError.textContent = "As senhas não conferem."; recoveryError.hidden = false; }
+        return;
+      }
+      if (pwd.length < 6) {
+        if (recoveryError) { recoveryError.textContent = "A senha deve ter no mínimo 6 caracteres."; recoveryError.hidden = false; }
+        return;
+      }
+
+      const submitBtn = recoveryForm.querySelector("button[type='submit']");
+      if (submitBtn) submitBtn.disabled = true;
+
+      const { error } = await getSupabaseClient().auth.updateUser({ password: pwd });
+
+      if (submitBtn) submitBtn.disabled = false;
+
+      if (error) {
+        const msg = String(error.message || "").toLowerCase();
+        const isSamePassword = msg.includes("same") || msg.includes("different") || msg.includes("antiga") || msg.includes("igual");
+        if (recoveryError) {
+          recoveryError.textContent = isSamePassword
+            ? "A nova senha não pode ser igual à senha atual. Escolha uma senha diferente."
+            : "Não foi possível salvar a senha. Tente novamente.";
+          recoveryError.hidden = false;
+        }
+        return;
+      }
+
+      // Limpar campos e sair do modo recovery
+      document.getElementById("recoveryPassword").value = "";
+      document.getElementById("recoveryPasswordConfirm").value = "";
+      recoveryMode = false;
+      clearSupabaseAuthCallbackUrl();
+      applyAuthVisibility();
+    });
+  }
+
   const loginForm = document.getElementById("loginForm");
   const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
   const firstAccessBtn = document.getElementById("firstAccessBtn");
@@ -1149,12 +1197,11 @@ async function initializeSupabaseAuth() {
   persistSessionUser();
   if (callbackMode) clearSupabaseAuthCallbackUrl();
   if (callbackMode === "recovery") {
-    const updated = await promptRemotePasswordSetup({ contextLabel: "redefinir sua senha", required: true });
-    if (!updated) {
-      await logoutCurrentUser();
-      setLoginProcessingState(false);
-      return;
-    }
+    recoveryMode = true;
+    supabaseAuthReady = true;
+    setLoginProcessingState(false);
+    applyAuthVisibility();
+    return;
   } else if (callbackMode === "magiclink") {
     await promptRemotePasswordSetup({ contextLabel: "definir sua senha para os próximos acessos", required: true });
   }
@@ -1284,6 +1331,14 @@ function applyAuthVisibility() {
   }
   if (splash) splash.classList.add("hidden");
 
+  const recoveryView = document.getElementById("recoveryView");
+  if (recoveryMode && user) {
+    if (recoveryView) recoveryView.hidden = false;
+    loginView.hidden = true;
+    appShell.hidden = true;
+    return;
+  }
+  if (recoveryView) recoveryView.hidden = true;
   loginView.hidden = Boolean(user) && !pendingAuth;
   appShell.hidden = !user || pendingAuth;
   if (profileMenuList) profileMenuList.hidden = true;
