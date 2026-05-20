@@ -77,6 +77,7 @@ const MAX_AUDIT_LOG_ITEMS = 2000;
 
 let state = null;
 let currentTab = "dashboard";
+let selectedDashboardView = "ambos"; // "ambos" | "producoes" | "rota"
 let selectedDashboardYears = new Set();
 let dashboardFiltersOpen = false;
 let selectedDashboardFilters = {
@@ -1977,40 +1978,121 @@ function renderAll() {
 }
 
 function renderDashboard() {
+  renderDashboardViewChips();
   renderDashboardYearChips();
   renderDashboardExtraFilters();
-  const allProjects = [...state.projects];
-  const projects = filteredDashboardProjects();
 
-  const totalProjects = allProjects.length;
-  const { regularSpent, shortDocSpent } = getDashboardSpentCollections(projects);
-  const totalSpent = regularSpent.reduce((acc, item) => acc + item.value, 0);
-  const totalProduction = regularSpent.reduce((acc, item) => acc + item.production, 0);
-  const totalTeam = regularSpent.reduce((acc, item) => acc + item.team, 0);
-  const avgSpent = regularSpent.length ? totalSpent / regularSpent.length : 0;
-  const shortDocSpentTotal = shortDocSpent.reduce((acc, item) => acc + item.value, 0);
+  const showProducoes = selectedDashboardView !== "rota";
+  const showRota = selectedDashboardView !== "producoes";
 
-  document.getElementById("summaryCards").innerHTML = [
-    cardHtml("Produções", String(totalProjects), "projects"),
-    cardHtml("Investimento Total", money(totalSpent), "spent"),
-    cardHtml("Custo de Produção", money(totalProduction), "production"),
-    cardHtml("Cachê de Equipe", money(totalTeam), "team"),
-    cardHtml("Média por Produção", money(avgSpent), "avg")
-  ].join("");
+  const projectsSection = document.getElementById("projectsDashboardSection");
+  const routeSection = document.getElementById("routeDashboardSection");
+  if (projectsSection) projectsSection.hidden = !showProducoes;
+  if (routeSection) routeSection.hidden = !showRota;
 
-  const categoryPicker = (project) => getNormalizedProjectField(project, "category", { strict: true });
-  const formatPicker = (project) => getNormalizedProjectField(project, "format", { strict: true });
-  const naturePicker = (project) => getNormalizedProjectField(project, "nature", { strict: true });
-  const durationPicker = (project) => getNormalizedProjectField(project, "duration", { strict: true });
+  if (showProducoes) {
+    const allProjects = [...state.projects];
+    const projects = filteredDashboardProjects();
 
-  renderBarChart(document.getElementById("chartByYear"), countByYearWithMissing(projects), "vertical", ["#f3ba00"]);
-  renderBarChart(document.getElementById("chartByStatus"), countBy(projects, (p) => getProjectField(p, "status"), true), "vertical", ["#10b981", "#3b82f6", "#f59e0b", "#94a3b8"]);
-  renderBarChart(document.getElementById("chartByCategory"), countBy(projects, categoryPicker, true), "vertical", ["#10b981", "#3b82f6", "#f59e0b", "#94a3b8"]);
-  renderBarChart(document.getElementById("chartByFormat"), countBy(projects, formatPicker, true), "vertical", ["#10b981", "#3b82f6", "#f59e0b"]);
-  renderBarChart(document.getElementById("chartByNature"), countBy(projects, naturePicker, true), "vertical", ["#10b981", "#3b82f6", "#f59e0b"]);
-  renderBarChart(document.getElementById("chartByDuration"), countBy(projects, durationPicker, true), "vertical", ["#10b981", "#3b82f6", "#f59e0b"]);
-  renderBarChart(document.getElementById("chartShortDocsSpent"), { "Short doc": shortDocSpentTotal }, "vertical", ["#64748b"], (value) => money(value));
-  renderBarChart(document.getElementById("chartAvgStage"), avgMonthsByStage(projects), "horizontal", ["#94a3b8", "#60a5fa", "#fcd34d", "#34d399", "#f472b6"]);
+    const totalProjects = allProjects.length;
+    const { regularSpent, shortDocSpent } = getDashboardSpentCollections(projects);
+    const totalSpent = regularSpent.reduce((acc, item) => acc + item.value, 0);
+    const totalProduction = regularSpent.reduce((acc, item) => acc + item.production, 0);
+    const totalTeam = regularSpent.reduce((acc, item) => acc + item.team, 0);
+    const avgSpent = regularSpent.length ? totalSpent / regularSpent.length : 0;
+    const shortDocSpentTotal = shortDocSpent.reduce((acc, item) => acc + item.value, 0);
+
+    document.getElementById("summaryCards").innerHTML = [
+      cardHtml("Produções", String(totalProjects), "projects"),
+      cardHtml("Investimento Total", money(totalSpent), "spent"),
+      cardHtml("Custo de Produção", money(totalProduction), "production"),
+      cardHtml("Cachê de Equipe", money(totalTeam), "team"),
+      cardHtml("Média por Produção", money(avgSpent), "avg")
+    ].join("");
+
+    const categoryPicker = (project) => getNormalizedProjectField(project, "category", { strict: true });
+    const formatPicker = (project) => getNormalizedProjectField(project, "format", { strict: true });
+    const naturePicker = (project) => getNormalizedProjectField(project, "nature", { strict: true });
+    const durationPicker = (project) => getNormalizedProjectField(project, "duration", { strict: true });
+
+    renderBarChart(document.getElementById("chartByYear"), countByYearWithMissing(projects), "vertical", ["#f3ba00"]);
+    renderBarChart(document.getElementById("chartByStatus"), countBy(projects, (p) => getProjectField(p, "status"), true), "vertical", ["#10b981", "#3b82f6", "#f59e0b", "#94a3b8"]);
+    renderBarChart(document.getElementById("chartByCategory"), countBy(projects, categoryPicker, true), "vertical", ["#10b981", "#3b82f6", "#f59e0b", "#94a3b8"]);
+    renderBarChart(document.getElementById("chartByFormat"), countBy(projects, formatPicker, true), "vertical", ["#10b981", "#3b82f6", "#f59e0b"]);
+    renderBarChart(document.getElementById("chartByNature"), countBy(projects, naturePicker, true), "vertical", ["#10b981", "#3b82f6", "#f59e0b"]);
+    renderBarChart(document.getElementById("chartByDuration"), countBy(projects, durationPicker, true), "vertical", ["#10b981", "#3b82f6", "#f59e0b"]);
+    renderBarChart(document.getElementById("chartShortDocsSpent"), { "Short doc": shortDocSpentTotal }, "vertical", ["#64748b"], (value) => money(value));
+    renderBarChart(document.getElementById("chartAvgStage"), avgMonthsByStage(projects), "horizontal", ["#94a3b8", "#60a5fa", "#fcd34d", "#34d399", "#f472b6"]);
+  }
+
+  if (showRota) {
+    renderRouteDashboard();
+  }
+}
+
+function renderDashboardViewChips() {
+  const container = document.getElementById("dashboardViewChips");
+  if (!container) return;
+  const options = [
+    { value: "ambos", label: "Ambos" },
+    { value: "producoes", label: "Produções" },
+    { value: "rota", label: "Rota" }
+  ];
+  container.innerHTML = options
+    .map((o) => `<button class="chip ${selectedDashboardView === o.value ? "active" : ""}" data-view="${o.value}">${o.label}</button>`)
+    .join("");
+  container.querySelectorAll(".chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      selectedDashboardView = chip.dataset.view;
+      renderDashboard();
+    });
+  });
+}
+
+function renderRouteDashboard() {
+  const allRouteItems = state.routes || [];
+  const routeProjects = getRouteSelectedProjects();
+  const filmsWithItems = new Set(allRouteItems.map((r) => r.projectId));
+  const totalFilms = filmsWithItems.size;
+  const totalEntries = allRouteItems.length;
+
+  // Cards de resumo
+  const summaryEl = document.getElementById("routeSummaryCards");
+  if (summaryEl) {
+    summaryEl.innerHTML = [
+      cardHtml("Filmes na Rota", String(routeProjects.length), "projects"),
+      cardHtml("Inscrições", String(totalEntries), "avg")
+    ].join("");
+  }
+
+  // Gráfico por status
+  const statusMap = countBy(allRouteItems, (item) => String(item.status || "").trim(), true);
+  renderBarChart(document.getElementById("chartRouteByStatus"), statusMap, "vertical",
+    ["#10b981", "#3b82f6", "#f59e0b", "#f97316", "#8b5cf6", "#94a3b8"]);
+
+  // Destaques: Premiados / Nomeados / Selecionados
+  const count = (test) => allRouteItems.filter((item) => test(String(item.status || ""))).length;
+  const premiados   = count((s) => /premi/i.test(s));
+  const nomeados    = count((s) => /nomin|nomeado/i.test(s));
+  const selecionados = count((s) => /selecio/i.test(s));
+
+  const highlightsEl = document.getElementById("routeHighlights");
+  if (highlightsEl) {
+    highlightsEl.innerHTML = `
+      <div class="route-highlight-item route-highlight-gold">
+        <span class="route-highlight-number">${premiados}</span>
+        <span class="route-highlight-label">Prêmios</span>
+      </div>
+      <div class="route-highlight-item route-highlight-purple">
+        <span class="route-highlight-number">${nomeados}</span>
+        <span class="route-highlight-label">Nomeações</span>
+      </div>
+      <div class="route-highlight-item route-highlight-blue">
+        <span class="route-highlight-number">${selecionados}</span>
+        <span class="route-highlight-label">Seleções</span>
+      </div>
+    `;
+  }
 }
 
 function renderDashboardYearChips() {

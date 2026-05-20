@@ -131,7 +131,10 @@
       <section id="dashboard" class="tab active">
         <header class="view-header">
           <div>
-            <h1>Dashboard</h1>
+            <div class="dashboard-header-row">
+              <h1>Dashboard</h1>
+              <div id="dashboardViewChips" class="dashboard-view-chips"></div>
+            </div>
             <p>Visão geral das suas produções</p>
           </div>
         </header>
@@ -179,50 +182,70 @@
           </div>
         </section>
 
-        <div id="summaryCards" class="summary-cards"></div>
+        <!-- Seção: Produções -->
+        <div id="projectsDashboardSection">
+          <div id="summaryCards" class="summary-cards"></div>
 
-        <div class="dashboard-grid">
-          <article class="panel wide">
-            <h3>Produções por Ano</h3>
-            <div id="chartByYear" class="chart-bars"></div>
-          </article>
+          <div class="dashboard-grid">
+            <article class="panel wide">
+              <h3>Produções por Ano</h3>
+              <div id="chartByYear" class="chart-bars"></div>
+            </article>
 
-          <article class="panel wide">
-            <h3>Tempo Médio por Etapa (meses)</h3>
-            <div id="chartAvgStage" class="chart-bars horizontal"></div>
-          </article>
+            <article class="panel wide">
+              <h3>Tempo Médio por Etapa (meses)</h3>
+              <div id="chartAvgStage" class="chart-bars horizontal"></div>
+            </article>
 
-          <article class="panel">
-            <h3>Por Status</h3>
-            <div id="chartByStatus" class="chart-bars"></div>
-          </article>
+            <article class="panel">
+              <h3>Por Status</h3>
+              <div id="chartByStatus" class="chart-bars"></div>
+            </article>
 
-          <article class="panel">
-            <h3>Por Categoria</h3>
-            <div id="chartByCategory" class="chart-bars"></div>
-          </article>
+            <article class="panel">
+              <h3>Por Categoria</h3>
+              <div id="chartByCategory" class="chart-bars"></div>
+            </article>
 
-          <article class="panel">
-            <h3>Por Formato</h3>
-            <div id="chartByFormat" class="chart-bars"></div>
-          </article>
+            <article class="panel">
+              <h3>Por Formato</h3>
+              <div id="chartByFormat" class="chart-bars"></div>
+            </article>
 
-          <article class="panel">
-            <h3>Por Natureza</h3>
-            <div id="chartByNature" class="chart-bars"></div>
-          </article>
+            <article class="panel">
+              <h3>Por Natureza</h3>
+              <div id="chartByNature" class="chart-bars"></div>
+            </article>
 
-          <article class="panel">
-            <h3>Por Duração</h3>
-            <div id="chartByDuration" class="chart-bars"></div>
-          </article>
+            <article class="panel">
+              <h3>Por Duração</h3>
+              <div id="chartByDuration" class="chart-bars"></div>
+            </article>
 
-          <article class="panel">
-            <h3>Gasto com Short docs</h3>
-            <div id="chartShortDocsSpent" class="chart-bars"></div>
-          </article>
-
+            <article class="panel">
+              <h3>Gasto com Short docs</h3>
+              <div id="chartShortDocsSpent" class="chart-bars"></div>
+            </article>
+          </div>
         </div>
+
+        <!-- Seção: Rota -->
+        <div id="routeDashboardSection">
+          <div id="routeSummaryCards" class="route-summary-cards"></div>
+
+          <div class="dashboard-grid">
+            <article class="panel wide">
+              <h3>Inscrições por Status</h3>
+              <div id="chartRouteByStatus" class="chart-bars"></div>
+            </article>
+
+            <article class="panel wide route-highlights-panel">
+              <h3>Destaques</h3>
+              <div id="routeHighlights" class="route-highlights"></div>
+            </article>
+          </div>
+        </div>
+
       </section>
 
       <section id="cronograma" class="tab">
