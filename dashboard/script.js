@@ -93,6 +93,7 @@ let selectedDashboardFilters = {
 let selectedGanttYears = new Set();
 let ganttFiltersOpen = false;
 let selectedGanttFilters = {
+  stages: new Set(),
   statuses: new Set(),
   categories: new Set(),
   formats: new Set(),
@@ -3134,6 +3135,12 @@ function renderGantt() {
     const stages = Array.isArray(project?.stages) ? project.stages : [];
     stages.forEach((st) => {
       if (!st || !isValidStagePeriod(st.start) || !isValidStagePeriod(st.end)) return;
+      // Filtro de etapas: se há etapas selecionadas, ocultar as não selecionadas
+      if (selectedGanttFilters.stages.size > 0) {
+        const stageDef = state.settings.stages.find((s) => s.id === st.stageId);
+        const stageName = stageDef?.name || st.name || "";
+        if (!selectedGanttFilters.stages.has(stageName)) return;
+      }
       const startIndex = stagePeriodToHalfIndex(st.start, "start");
       const endIndex = stagePeriodToHalfIndex(st.end, "end");
       if (!Number.isFinite(startIndex) || !Number.isFinite(endIndex)) return;
@@ -3348,6 +3355,8 @@ function renderGanttExtraFilters() {
   const natureValues = uniq([...(state.settings?.natures || []), ...state.projects.map((p) => getProjectField(p, "nature"))]).filter(Boolean);
   const durationValues = uniq([...(state.settings?.durations || []), ...state.projects.map((p) => getProjectField(p, "duration"))]).filter(Boolean);
   const distributionValues = uniq([...(state.settings?.distributions || []), ...state.projects.flatMap((p) => getProjectDistributions(p))]).filter(Boolean);
+  const stageValues = (state.settings?.stages || []).map((s) => s.name).filter(Boolean);
+  sanitizeFilterSet(selectedGanttFilters.stages, stageValues);
   sanitizeFilterSet(selectedGanttFilters.statuses, statusValues);
   sanitizeFilterSet(selectedGanttFilters.categories, categoryValues);
   sanitizeFilterSet(selectedGanttFilters.formats, formatValues);
@@ -3356,6 +3365,13 @@ function renderGanttExtraFilters() {
   sanitizeFilterSet(selectedGanttFilters.distributions, distributionValues);
   sanitizeFilterSet(selectedGanttFilters.flags, PROJECT_RECORD_FILTER_FIELDS.map((field) => field.key));
 
+  renderDashboardFilterChips(
+    document.getElementById("ganttStageChips"),
+    stageValues,
+    selectedGanttFilters.stages,
+    "stages",
+    () => renderGantt()
+  );
   renderDashboardFilterChips(
     document.getElementById("ganttStatusChips"),
     statusValues,

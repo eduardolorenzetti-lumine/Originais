@@ -165,6 +165,22 @@ CREATE INDEX projects_code_idx ON projects(code);
 
 ---
 
+### [2026-05-20] ~17h00 — DATA_RECOVERY
+**O que foi feito:** Restaurada etapa "CÂMERA ABERTA" (id: `3tupo4c9`) no `settings.stages` do Supabase.
+**Motivo / Contexto:** A etapa havia sido removida do array de settings (provavelmente por conflito de cache local), mas 5 projetos ainda referenciavam seu ID: After the third day (02-27), Brasil de Todos os Santos 03 (02-87), Cidade Amarela IV (02-94), O Último Sacrifício (02-95) e Fé Asiática (02-96). Na timeline, clicar nesses blocos abria a etapa errada (Development).
+**Impacto:** Etapa reinserida entre PRÉ-PRODUÇÃO e PRODUÇÃO com cor `#22c55e`. Todas as referências existentes voltaram a funcionar.
+**Feito por:** Claude
+
+---
+
+### [2026-05-20] ~17h15 — FEATURE
+**O que foi feito:** Adicionado filtro de Etapas no painel de filtros da aba Cronograma (Timeline/Gantt).
+**Motivo / Contexto:** Usuário queria filtrar quais etapas são exibidas na timeline. O filtro controla visibilidade dos blocos de etapa — projetos continuam visíveis mas apenas as etapas selecionadas são renderizadas.
+**Impacto:** Chips de etapa aparecem como primeiro filtro no painel. Por padrão (nenhuma seleção) todas as etapas são exibidas.
+**Feito por:** Claude
+
+---
+
 ## Estado Atual do Sistema (2026-05-20)
 
 | Métrica                  | Valor              |
