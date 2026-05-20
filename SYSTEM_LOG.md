@@ -32,7 +32,7 @@ Categorias: `BUG_FIX` | `DATA_RECOVERY` | `FEATURE` | `DB_SCHEMA` | `DATA_CORREC
 ---
 
 ### [2026-05-19] ~15h00 — DATA_RECOVERY
-**O que foi feito:** Recuperação de dados do Chrome localStorage (Profile 4, origin `https://originais-dashboard.lorenzettidudu.workers.dev`) via leitura direta do LevelDB com Python 3.9 + pacote `leveldb`.
+**O que foi feito:** Recuperação de dados do Chrome localStorage (Profile 4, origin `https://originais-dashboard.lorenzettidudu.workers.dev` — endereço antigo de deploy; URL atual: `https://originais.lumine.tv/dashboard/`) via leitura direta do LevelDB com Python 3.9 + pacote `leveldb`.
 **Motivo / Contexto:** O Chrome mantinha lock no LevelDB. Solução: copiar o diretório para `/tmp/chrome_ls_copy/` e remover o arquivo `LOCK`. Dados estavam em UTF-16LE com prefixo de 1 byte.
 **Impacto:** Recuperados 98 projetos com total de R$1.315.739,09 — o estado mais completo encontrado.
 **Feito por:** Claude
