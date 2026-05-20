@@ -3750,9 +3750,23 @@ function renderRoute() {
   renderValuePickerFilter(document.getElementById("routeCountryFilter"), routeCountries, selectedRouteFilters.countries, "routeCountries", renderRoute, "Buscar país...");
   renderDashboardFilterChips(document.getElementById("routeExclusivityChips"), routeExclusivities, selectedRouteFilters.exclusivities, "route-exclusivities", renderRoute);
 
-  summary.innerHTML = editable
-    ? '<button id="btnAddRouteProject" class="btn accent" type="button">+ Adicionar Filme</button>'
-    : "";
+  const allExpanded = projects.length > 0 && projects.every((p) => expandedRouteProjects.has(p.id));
+  summary.innerHTML = `
+    <button id="btnToggleAllRoute" class="btn light" type="button" title="${allExpanded ? "Recolher todos" : "Expandir todos"}">
+      ${allExpanded
+        ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="margin-right:4px"><path d="M7 14l5-5 5 5H7z"/></svg>Recolher`
+        : `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="margin-right:4px"><path d="M7 10l5 5 5-5H7z"/></svg>Expandir`}
+    </button>
+    ${editable ? '<button id="btnAddRouteProject" class="btn accent" type="button">+ Adicionar Filme</button>' : ""}
+  `;
+  document.getElementById("btnToggleAllRoute")?.addEventListener("click", () => {
+    if (allExpanded) {
+      projects.forEach((p) => expandedRouteProjects.delete(p.id));
+    } else {
+      projects.forEach((p) => expandedRouteProjects.add(p.id));
+    }
+    renderRoute();
+  });
   document.getElementById("btnAddRouteProject")?.addEventListener("click", () => openRouteProjectDialog());
 
   const visibleProjects = projects
@@ -3761,12 +3775,10 @@ function renderRoute() {
       const hasRouteFilters =
         selectedRouteFilters.statuses.size > 0 ||
         selectedRouteFilters.countries.size > 0 ||
-        selectedRouteFilters.resultYears.size > 0 ||
         selectedRouteFilters.exclusivities.size > 0;
       const projectItems = getRouteItemsForProject(project.id).filter((item) => {
         if (!matchesMultiFilter(String(item.status || "").trim(), selectedRouteFilters.statuses)) return false;
         if (!matchesMultiFilter(String(item.country || "").trim(), selectedRouteFilters.countries)) return false;
-        if (!matchesMultiFilter(getRouteResultYear(item), selectedRouteFilters.resultYears)) return false;
         if (!matchesMultiFilter(String(item.exclusivity || "").trim(), selectedRouteFilters.exclusivities)) return false;
         if (!query) return true;
         return projectHit || routeItemMatchesQuery(item, query);

@@ -1554,20 +1554,16 @@ tbody tr:hover {
   margin-bottom: 14px;
 }
 
+.route-toolbar #routeSearch {
+  flex: 1;
+  min-width: 0;
+}
+
 .route-summary {
   display: flex;
   align-items: center;
+  gap: 8px;
   flex-shrink: 0;
-}
-
-.route-toolbar-actions {
-  display: flex;
-  flex: 1;
-}
-
-.route-toolbar-actions input {
-  width: 100%;
-  max-width: 360px;
 }
 
 .route-table-wrap {
