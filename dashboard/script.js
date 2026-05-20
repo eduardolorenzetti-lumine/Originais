@@ -2110,8 +2110,9 @@ function renderRouteDashboard() {
   renderBarChart(document.getElementById("chartRouteByStatus"), statusMap, "vertical",
     ["#10b981", "#3b82f6", "#f59e0b", "#f97316", "#8b5cf6", "#94a3b8"]);
 
-  // Top 5 Premiados
-  renderRouteTop5(allRouteItems, isPremiado);
+  // Top 5 Destaques (premiados + nomeados + selecionados)
+  const isDestaque = (s) => isPremiado(s) || isNomeado(s) || isSelecionado(s);
+  renderRouteTop5(allRouteItems, isDestaque);
 }
 
 function renderRouteTop5(allRouteItems, filterFn) {
@@ -2120,7 +2121,7 @@ function renderRouteTop5(allRouteItems, filterFn) {
 
   const premiItems = allRouteItems.filter((item) => filterFn(String(item.status || "")));
   if (!premiItems.length) {
-    container.innerHTML = '<p class="empty" style="font-size:0.85rem;color:var(--muted)">Nenhuma premiação registrada.</p>';
+    container.innerHTML = '<p class="empty" style="font-size:0.85rem;color:var(--muted)">Nenhum destaque registrado.</p>';
     return;
   }
 
@@ -2148,7 +2149,7 @@ function renderRouteTop5(allRouteItems, filterFn) {
         <div class="route-top5-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
         <div class="route-top5-bar-wrap">
           <div class="route-top5-bar" style="width:${pct}%"></div>
-          <span class="route-top5-count">${count} prêmio${count !== 1 ? "s" : ""}</span>
+          <span class="route-top5-count">${count} destaque${count !== 1 ? "s" : ""}</span>
         </div>
       </div>`;
     })
@@ -2672,7 +2673,10 @@ function ensureFixedNature(items = []) {
   return normalized;
 }
 
+const PROTECTED_ROUTE_STATUSES = new Set(["SELECIONADO", "NOMEADO", "PREMIADO", "NÃO SELECIONADO"]);
+
 function isProtectedConfigItem(key, label) {
+  if (key === "routeStatuses") return PROTECTED_ROUTE_STATUSES.has(String(label || "").trim().toUpperCase());
   if (key !== "natures") return false;
   return normalizeSearchText(label) === normalizeSearchText(FIXED_NATURE_LABEL);
 }
