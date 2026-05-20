@@ -234,14 +234,19 @@
           <div id="routeSummaryCards" class="route-summary-cards"></div>
 
           <div class="dashboard-grid">
-            <article class="panel wide">
+            <article class="panel wide route-highlights-panel">
+              <h3>Premiações</h3>
+              <div id="routeHighlights" class="route-highlights"></div>
+            </article>
+
+            <article class="panel">
               <h3>Inscrições por Status</h3>
               <div id="chartRouteByStatus" class="chart-bars"></div>
             </article>
 
-            <article class="panel wide route-highlights-panel">
-              <h3>Destaques</h3>
-              <div id="routeHighlights" class="route-highlights"></div>
+            <article class="panel">
+              <h3>Top 5 Premiados</h3>
+              <div id="routeTop5" class="route-top5"></div>
             </article>
           </div>
         </div>
@@ -812,6 +817,16 @@
         <button type="submit" class="btn accent">Salvar Etapa</button>
       </menu>
     </form>
+  </dialog>
+
+  <dialog id="routeInfoDialog">
+    <div class="route-info-header">
+      <h3 id="routeInfoTitle"></h3>
+      <button id="btnCloseRouteInfo" class="btn light icon-btn" type="button" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="routeInfoBody" class="route-info-body"></div>
   </dialog>
 
   <script src="config.js"></script>

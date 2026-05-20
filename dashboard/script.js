@@ -1923,6 +1923,10 @@ function bindDialog() {
     renderRoute();
   });
 
+  document.getElementById("btnCloseRouteInfo")?.addEventListener("click", () => {
+    document.getElementById("routeInfoDialog")?.close();
+  });
+
   document.getElementById("btnCancelRouteItem").addEventListener("click", () => routeItemDialog.close());
   document.getElementById("btnDeleteRouteItem").addEventListener("click", () => {
     if (!canEditContent()) {
@@ -2052,17 +2056,53 @@ function renderDashboardViewChips() {
 function renderRouteDashboard() {
   const allRouteItems = state.routes || [];
   const routeProjects = getRouteSelectedProjects();
-  const filmsWithItems = new Set(allRouteItems.map((r) => r.projectId));
-  const totalFilms = filmsWithItems.size;
   const totalEntries = allRouteItems.length;
+
+  // Funções de filtro por categoria
+  const isPremiado   = (s) => /premi/i.test(s);
+  const isNomeado    = (s) => /nomin|nomeado/i.test(s);
+  const isSelecionado = (s) => /selecio/i.test(s);
+
+  const countMatch = (test) => allRouteItems.filter((item) => test(String(item.status || ""))).length;
+  const premiados    = countMatch(isPremiado);
+  const nomeados     = countMatch(isNomeado);
+  const selecionados = countMatch(isSelecionado);
 
   // Cards de resumo
   const summaryEl = document.getElementById("routeSummaryCards");
   if (summaryEl) {
     summaryEl.innerHTML = [
       cardHtml("Filmes na Rota", String(routeProjects.length), "projects"),
-      cardHtml("Inscrições", String(totalEntries), "avg")
+      cardHtml("Total de Inscrições", String(totalEntries), "avg")
     ].join("");
+  }
+
+  // Destaques / Premiações — clicáveis
+  const highlightsEl = document.getElementById("routeHighlights");
+  if (highlightsEl) {
+    highlightsEl.innerHTML = `
+      <div class="route-highlight-item route-highlight-gold" role="button" tabindex="0" data-highlight="premiados">
+        <span class="route-highlight-number">${premiados}</span>
+        <span class="route-highlight-label">Prêmios</span>
+      </div>
+      <div class="route-highlight-item route-highlight-purple" role="button" tabindex="0" data-highlight="nomeados">
+        <span class="route-highlight-number">${nomeados}</span>
+        <span class="route-highlight-label">Nomeações</span>
+      </div>
+      <div class="route-highlight-item route-highlight-blue" role="button" tabindex="0" data-highlight="selecionados">
+        <span class="route-highlight-number">${selecionados}</span>
+        <span class="route-highlight-label">Seleções</span>
+      </div>
+    `;
+    highlightsEl.querySelectorAll("[data-highlight]").forEach((el) => {
+      el.addEventListener("click", () => {
+        const type = el.dataset.highlight;
+        const filterFn = type === "premiados" ? isPremiado : type === "nomeados" ? isNomeado : isSelecionado;
+        const label = type === "premiados" ? "Prêmios" : type === "nomeados" ? "Nomeações" : "Seleções";
+        const matching = allRouteItems.filter((item) => filterFn(String(item.status || "")));
+        openRouteInfoByCategory(label, matching);
+      });
+    });
   }
 
   // Gráfico por status
@@ -2070,29 +2110,101 @@ function renderRouteDashboard() {
   renderBarChart(document.getElementById("chartRouteByStatus"), statusMap, "vertical",
     ["#10b981", "#3b82f6", "#f59e0b", "#f97316", "#8b5cf6", "#94a3b8"]);
 
-  // Destaques: Premiados / Nomeados / Selecionados
-  const count = (test) => allRouteItems.filter((item) => test(String(item.status || ""))).length;
-  const premiados   = count((s) => /premi/i.test(s));
-  const nomeados    = count((s) => /nomin|nomeado/i.test(s));
-  const selecionados = count((s) => /selecio/i.test(s));
+  // Top 5 Premiados
+  renderRouteTop5(allRouteItems, isPremiado);
+}
 
-  const highlightsEl = document.getElementById("routeHighlights");
-  if (highlightsEl) {
-    highlightsEl.innerHTML = `
-      <div class="route-highlight-item route-highlight-gold">
-        <span class="route-highlight-number">${premiados}</span>
-        <span class="route-highlight-label">Prêmios</span>
-      </div>
-      <div class="route-highlight-item route-highlight-purple">
-        <span class="route-highlight-number">${nomeados}</span>
-        <span class="route-highlight-label">Nomeações</span>
-      </div>
-      <div class="route-highlight-item route-highlight-blue">
-        <span class="route-highlight-number">${selecionados}</span>
-        <span class="route-highlight-label">Seleções</span>
-      </div>
-    `;
+function renderRouteTop5(allRouteItems, filterFn) {
+  const container = document.getElementById("routeTop5");
+  if (!container) return;
+
+  const premiItems = allRouteItems.filter((item) => filterFn(String(item.status || "")));
+  if (!premiItems.length) {
+    container.innerHTML = '<p class="empty" style="font-size:0.85rem;color:var(--muted)">Nenhuma premiação registrada.</p>';
+    return;
   }
+
+  // Contar por projeto
+  const countByProject = {};
+  premiItems.forEach((item) => {
+    countByProject[item.projectId] = (countByProject[item.projectId] || 0) + 1;
+  });
+
+  const top5 = Object.entries(countByProject)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 5)
+    .map(([projectId, count]) => {
+      const project = state.projects.find((p) => p.id === projectId);
+      return { projectId, project, count };
+    });
+
+  const maxCount = top5[0]?.count || 1;
+
+  container.innerHTML = top5
+    .map(({ projectId, project, count }) => {
+      const label = project ? (project.title || "Projeto") : "Projeto desconhecido";
+      const pct = Math.round((count / maxCount) * 100);
+      return `<div class="route-top5-item" data-project-id="${escapeHtml(projectId)}" role="button" tabindex="0">
+        <div class="route-top5-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+        <div class="route-top5-bar-wrap">
+          <div class="route-top5-bar" style="width:${pct}%"></div>
+          <span class="route-top5-count">${count} prêmio${count !== 1 ? "s" : ""}</span>
+        </div>
+      </div>`;
+    })
+    .join("");
+
+  container.querySelectorAll(".route-top5-item").forEach((el) => {
+    el.addEventListener("click", () => {
+      const projectId = el.dataset.projectId;
+      const project = state.projects.find((p) => p.id === projectId);
+      const title = project ? `${project.title || "Projeto"}${project.code ? " — #" + project.code : ""}` : "Premiações";
+      const items = allRouteItems.filter((r) => r.projectId === projectId && filterFn(String(r.status || "")));
+      openRouteInfoByFilm(title, items);
+    });
+  });
+}
+
+function openRouteInfoByCategory(label, items) {
+  // Agrupa por projeto
+  const byProject = {};
+  items.forEach((item) => {
+    if (!byProject[item.projectId]) byProject[item.projectId] = [];
+    byProject[item.projectId].push(item);
+  });
+
+  const bodyHtml = Object.entries(byProject).length
+    ? Object.entries(byProject).map(([projectId, projectItems]) => {
+        const project = state.projects.find((p) => p.id === projectId);
+        const filmName = project
+          ? `${escapeHtml(project.title || "Projeto")} <span class="route-info-sku">${project.code ? "#" + project.code : ""}</span>`
+          : "Projeto desconhecido";
+        const listItems = projectItems
+          .map((item) => `<li>${escapeHtml(item.name || "—")}${item.status ? ` <span class="route-info-sku">${escapeHtml(item.status)}</span>` : ""}</li>`)
+          .join("");
+        return `<div class="route-info-group"><strong>${filmName}</strong><ul>${listItems}</ul></div>`;
+      }).join("")
+    : "<p style='color:var(--muted);font-size:0.9rem'>Nenhum item encontrado.</p>";
+
+  showRouteInfoModal(label, bodyHtml);
+}
+
+function openRouteInfoByFilm(title, items) {
+  const bodyHtml = items.length
+    ? `<ul style="padding-left:18px;margin:0">${items.map((item) =>
+        `<li style="padding:3px 0;font-size:0.87rem">${escapeHtml(item.name || "—")}${item.status ? ` <span class="route-info-sku">${escapeHtml(item.status)}</span>` : ""}</li>`
+      ).join("")}</ul>`
+    : "<p style='color:var(--muted);font-size:0.9rem'>Nenhuma premiação encontrada.</p>";
+
+  showRouteInfoModal(title, bodyHtml);
+}
+
+function showRouteInfoModal(title, bodyHtml) {
+  const dialog = document.getElementById("routeInfoDialog");
+  if (!dialog) return;
+  document.getElementById("routeInfoTitle").textContent = title;
+  document.getElementById("routeInfoBody").innerHTML = bodyHtml;
+  dialog.showModal();
 }
 
 function renderDashboardYearChips() {
