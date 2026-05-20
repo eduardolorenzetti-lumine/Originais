@@ -3366,17 +3366,17 @@ function renderGanttExtraFilters() {
   sanitizeFilterSet(selectedGanttFilters.flags, PROJECT_RECORD_FILTER_FIELDS.map((field) => field.key));
 
   renderDashboardFilterChips(
-    document.getElementById("ganttStageChips"),
-    stageValues,
-    selectedGanttFilters.stages,
-    "stages",
-    () => renderGantt()
-  );
-  renderDashboardFilterChips(
     document.getElementById("ganttStatusChips"),
     statusValues,
     selectedGanttFilters.statuses,
     "statuses",
+    () => renderGantt()
+  );
+  renderDashboardFilterChips(
+    document.getElementById("ganttStageChips"),
+    stageValues,
+    selectedGanttFilters.stages,
+    "stages",
     () => renderGantt()
   );
   renderDashboardFilterChips(
