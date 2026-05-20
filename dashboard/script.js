@@ -1587,7 +1587,8 @@ function bindDialog() {
   const projectReleaseDateTextInput = document.getElementById("projectReleaseDateText");
   const projectReleaseDatePickerInput = document.getElementById("projectReleaseDatePicker");
   const projectReleaseDateOpenBtn = document.getElementById("projectReleaseDateOpen");
-  const projectBudgetInput = document.getElementById("projectBudget");
+  const projectSpentProductionInput = document.getElementById("projectSpentProduction");
+  const projectSpentTeamInput = document.getElementById("projectSpentTeam");
   const projectStatusSelect = document.getElementById("projectStatus");
 
   document.getElementById("btnCancelDialog").addEventListener("click", () => dialog.close());
@@ -1681,9 +1682,15 @@ function bindDialog() {
     input.addEventListener("change", updateStageDialogMonthLabels);
   });
 
-  projectBudgetInput.addEventListener("blur", () => {
-    const parsed = parseCurrencyInputBRL(projectBudgetInput.value);
-    projectBudgetInput.value = parsed === null ? "" : formatCurrencyInputBRL(parsed);
+  projectSpentProductionInput.addEventListener("blur", () => {
+    const parsed = parseCurrencyInputBRL(projectSpentProductionInput.value);
+    projectSpentProductionInput.value = parsed === null ? "" : formatCurrencyInputBRL(parsed);
+    updateProjectSpentTotal();
+  });
+  projectSpentTeamInput.addEventListener("blur", () => {
+    const parsed = parseCurrencyInputBRL(projectSpentTeamInput.value);
+    projectSpentTeamInput.value = parsed === null ? "" : formatCurrencyInputBRL(parsed);
+    updateProjectSpentTotal();
   });
 
   form.addEventListener("submit", (e) => {
