@@ -131,7 +131,7 @@ const projectFilterQueries = {
 let selectedConfigKey = "stages";
 let selectedStageRef = null;
 let routeSearchQuery = "";
-let collapsedRouteProjects = new Set();
+let expandedRouteProjects = new Set();
 let draggingStage = null;
 let draggingRelease = null;
 let suppressLineClickUntil = 0;
@@ -1613,7 +1613,7 @@ function bindDialog() {
     state.projects = state.projects.filter((p) => p.id !== id);
     state.routeProjects = normalizeRouteProjectIds((state.routeProjects || []).filter((projectId) => projectId !== id));
     state.routes = (state.routes || []).filter((item) => item.projectId !== id);
-    collapsedRouteProjects.delete(id);
+    expandedRouteProjects.delete(id);
     saveState();
     dialog.close();
     renderAll();
@@ -1914,7 +1914,7 @@ function bindDialog() {
       return;
     }
     state.routeProjects = normalizeRouteProjectIds([...(state.routeProjects || []), projectId]);
-    collapsedRouteProjects.delete(projectId);
+    expandedRouteProjects.delete(projectId); // novo filme entra recolhido por padrão
     projectFilterQueries.routeProjects = "";
     routeProjectDialogSelection = "";
     saveState();
@@ -1953,7 +1953,7 @@ function bindDialog() {
     }
     saveState();
     routeItemDialog.close();
-    collapsedRouteProjects.delete(item.projectId);
+    expandedRouteProjects.add(item.projectId); // expande o filme ao salvar festival
     renderRoute();
   });
 }
@@ -3712,7 +3712,7 @@ function renderProjectsTable() {
       state.projects = state.projects.filter((p) => p.id !== btn.dataset.id);
       state.routeProjects = normalizeRouteProjectIds((state.routeProjects || []).filter((projectId) => projectId !== btn.dataset.id));
       state.routes = (state.routes || []).filter((item) => item.projectId !== btn.dataset.id);
-      collapsedRouteProjects.delete(btn.dataset.id);
+      expandedRouteProjects.delete(btn.dataset.id);
       saveState();
       renderAll();
     });
@@ -3742,21 +3742,12 @@ function renderRoute() {
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b, "pt-BR"))
   );
-  const routeResultYears = uniq(
-    allRouteItems
-      .map((item) => getRouteResultYear(item))
-      .filter(Boolean)
-      .sort((a, b) => Number(b) - Number(a))
-  );
-
   sanitizeFilterSet(selectedRouteFilters.statuses, routeStatuses);
   sanitizeFilterSet(selectedRouteFilters.countries, routeCountries);
-  sanitizeFilterSet(selectedRouteFilters.resultYears, routeResultYears);
   sanitizeFilterSet(selectedRouteFilters.exclusivities, routeExclusivities);
 
   renderDashboardFilterChips(document.getElementById("routeStatusChips"), routeStatuses, selectedRouteFilters.statuses, "route-statuses", renderRoute);
   renderValuePickerFilter(document.getElementById("routeCountryFilter"), routeCountries, selectedRouteFilters.countries, "routeCountries", renderRoute, "Buscar país...");
-  renderDashboardFilterChips(document.getElementById("routeResultYearChips"), routeResultYears, selectedRouteFilters.resultYears, "route-result-years", renderRoute);
   renderDashboardFilterChips(document.getElementById("routeExclusivityChips"), routeExclusivities, selectedRouteFilters.exclusivities, "route-exclusivities", renderRoute);
 
   summary.innerHTML = editable
@@ -3800,7 +3791,7 @@ function renderRoute() {
   body.innerHTML = visibleProjects
     .map(({ project, items: projectItems }) => {
       const count = projectItems.length;
-      const collapsed = collapsedRouteProjects.has(project.id);
+      const collapsed = !expandedRouteProjects.has(project.id);
 
       const projectRow = `<tr class="route-project-row">
         <td>
@@ -3875,8 +3866,8 @@ function renderRoute() {
     btn.addEventListener("click", () => {
       const projectId = btn.dataset.projectId;
       if (!projectId) return;
-      if (collapsedRouteProjects.has(projectId)) collapsedRouteProjects.delete(projectId);
-      else collapsedRouteProjects.add(projectId);
+      if (expandedRouteProjects.has(projectId)) expandedRouteProjects.delete(projectId);
+      else expandedRouteProjects.add(projectId);
       renderRoute();
     });
   });
@@ -3889,7 +3880,7 @@ function renderRoute() {
         if (!confirm("Remover este filme da Rota? Os festivais e prêmios vinculados também serão excluídos.")) return;
         state.routeProjects = normalizeRouteProjectIds((state.routeProjects || []).filter((id) => id !== projectId));
         state.routes = (state.routes || []).filter((item) => item.projectId !== projectId);
-        collapsedRouteProjects.delete(projectId);
+        expandedRouteProjects.delete(projectId);
         saveState();
         renderRoute();
       });

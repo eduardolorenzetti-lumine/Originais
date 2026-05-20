@@ -1557,16 +1557,17 @@ tbody tr:hover {
 .route-summary {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .route-toolbar-actions {
   display: flex;
-  justify-content: flex-end;
   flex: 1;
 }
 
 .route-toolbar-actions input {
-  width: min(360px, 100%);
+  width: 100%;
+  max-width: 360px;
 }
 
 .route-table-wrap {
