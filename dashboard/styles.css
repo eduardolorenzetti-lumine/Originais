@@ -716,6 +716,9 @@ textarea {
 #routeInfoDialog {
   width: min(600px, 96vw);
   max-height: 80vh;
+}
+
+#routeInfoDialog[open] {
   display: flex;
   flex-direction: column;
 }

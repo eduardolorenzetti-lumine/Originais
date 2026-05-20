@@ -2061,7 +2061,7 @@ function renderRouteDashboard() {
   // Funções de filtro por categoria
   const isPremiado   = (s) => /premi/i.test(s);
   const isNomeado    = (s) => /nomin|nomeado/i.test(s);
-  const isSelecionado = (s) => /selecio/i.test(s);
+  const isSelecionado = (s) => /selecio/i.test(s) && !/não\s*selecio|nao\s*selecio/i.test(s);
 
   const countMatch = (test) => allRouteItems.filter((item) => test(String(item.status || ""))).length;
   const premiados    = countMatch(isPremiado);
@@ -2204,6 +2204,16 @@ function showRouteInfoModal(title, bodyHtml) {
   if (!dialog) return;
   document.getElementById("routeInfoTitle").textContent = title;
   document.getElementById("routeInfoBody").innerHTML = bodyHtml;
+
+  // Garantir que o botão de fechar funcione (re-bind)
+  const closeBtn = document.getElementById("btnCloseRouteInfo");
+  if (closeBtn) closeBtn.onclick = () => dialog.close();
+
+  // Fechar ao clicar no backdrop
+  dialog.onclick = (e) => {
+    if (e.target === dialog) dialog.close();
+  };
+
   dialog.showModal();
 }
 
