@@ -1325,6 +1325,7 @@ function applyAuthVisibility() {
   const splash = document.getElementById("authLoadingScreen");
   if (authStillPending) {
     loginView.hidden = true;
+    setLoginPasswordFieldType(false);
     appShell.hidden = true;
     if (splash) splash.classList.remove("hidden");
     return;
@@ -1335,12 +1336,14 @@ function applyAuthVisibility() {
   if (recoveryMode && user) {
     if (recoveryView) recoveryView.hidden = false;
     loginView.hidden = true;
+    setLoginPasswordFieldType(false);
     appShell.hidden = true;
     return;
   }
   if (recoveryView) recoveryView.hidden = true;
   loginView.hidden = Boolean(user) && !pendingAuth;
   appShell.hidden = !user || pendingAuth;
+  setLoginPasswordFieldType(!loginView.hidden);
   if (profileMenuList) profileMenuList.hidden = true;
   if (profileMenuUser) profileMenuUser.textContent = user ? `${user.name || "Usuário"} • ${user.role || "LEITOR"}` : "";
   const btnCreateUser = document.getElementById("btnCreateUser");
@@ -1377,6 +1380,11 @@ function applyAuthVisibility() {
   updateThemeOptionButtons();
 }
 
+function setLoginPasswordFieldType(visible) {
+  const input = document.getElementById("loginPassword");
+  if (input) input.type = visible ? "password" : "text";
+}
+
 function ensureAuthSurfaceVisible() {
   const loginView = document.getElementById("loginView");
   const appShell = document.getElementById("appShell");
@@ -1385,6 +1393,7 @@ function ensureAuthSurfaceVisible() {
   const user = getCurrentUser();
   loginView.hidden = Boolean(user);
   appShell.hidden = !user;
+  setLoginPasswordFieldType(!loginView.hidden);
 }
 
 async function logoutCurrentUser() {
