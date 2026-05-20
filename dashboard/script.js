@@ -1969,13 +1969,17 @@ function renderDashboard() {
   const totalProjects = allProjects.length;
   const { regularSpent, shortDocSpent } = getDashboardSpentCollections(projects);
   const totalSpent = regularSpent.reduce((acc, item) => acc + item.value, 0);
+  const totalProduction = regularSpent.reduce((acc, item) => acc + item.production, 0);
+  const totalTeam = regularSpent.reduce((acc, item) => acc + item.team, 0);
   const avgSpent = regularSpent.length ? totalSpent / regularSpent.length : 0;
   const shortDocSpentTotal = shortDocSpent.reduce((acc, item) => acc + item.value, 0);
 
   document.getElementById("summaryCards").innerHTML = [
-    cardHtml("Total de Produções", String(totalProjects), "projects"),
-    cardHtml("Total Gasto", money(totalSpent), "spent"),
-    cardHtml("Gasto Médio por Projeto", money(avgSpent), "avg")
+    cardHtml("Produções", String(totalProjects), "projects"),
+    cardHtml("Investimento Total", money(totalSpent), "spent"),
+    cardHtml("Custo de Produção", money(totalProduction), "production"),
+    cardHtml("Cachê de Equipe", money(totalTeam), "team"),
+    cardHtml("Média por Produção", money(avgSpent), "avg")
   ].join("");
 
   const categoryPicker = (project) => getNormalizedProjectField(project, "category", { strict: true });
@@ -2422,8 +2426,10 @@ function getDashboardSpentCollections(projects = []) {
   (Array.isArray(projects) ? projects : []).forEach((project) => {
     const value = getProjectSpentValue(project);
     if (value === null) return;
-    if (isShortDocProject(project)) shortDocSpent.push({ p: project, value });
-    else regularSpent.push({ p: project, value });
+    const production = hasNumericValue(project?.spentProduction) ? Number(project.spentProduction) : value;
+    const team = hasNumericValue(project?.spentTeam) ? Number(project.spentTeam) : 0;
+    if (isShortDocProject(project)) shortDocSpent.push({ p: project, value, production, team });
+    else regularSpent.push({ p: project, value, production, team });
   });
   return { regularSpent, shortDocSpent };
 }
@@ -4247,9 +4253,14 @@ function openProjectDialog(projectId = null) {
   document.getElementById("projectCode").value = project?.code || nextCode(isShortDoc ? "03" : "02");
   document.getElementById("projectTitle").value = project?.title || "";
   document.getElementById("projectYear").value = project?.year || "";
-  document.getElementById("projectBudget").value = formatCurrencyInputBRL(
-    hasNumericValue(project?.budget) ? Number(project.budget) : hasNumericValue(project?.spent) ? Number(project.spent) : null
-  );
+  const totalValue = hasNumericValue(project?.budget) ? Number(project.budget) : hasNumericValue(project?.spent) ? Number(project.spent) : null;
+  const productionValue = hasNumericValue(project?.spentProduction) ? Number(project.spentProduction) : totalValue;
+  const teamValue = hasNumericValue(project?.spentTeam) ? Number(project.spentTeam) : 0;
+  document.getElementById("projectSpentProduction").value = formatCurrencyInputBRL(productionValue);
+  document.getElementById("projectSpentTeam").value = formatCurrencyInputBRL(teamValue || null);
+  updateProjectSpentTotal();
+  document.getElementById("projectSpentProduction").oninput = updateProjectSpentTotal;
+  document.getElementById("projectSpentTeam").oninput = updateProjectSpentTotal;
 
   // Evento: mudança na Natureza atualiza SKU automaticamente para novos projetos
   const natureSelect = document.getElementById("projectNature");
@@ -4281,19 +4292,26 @@ function collectProjectForm() {
   if (!canEditContent()) return null;
   const projectId = document.getElementById("projectId").value;
   const existingProject = state.projects.find((project) => project.id === projectId);
-  const rawBudget = document.getElementById("projectBudget").value.trim();
+  const rawProduction = document.getElementById("projectSpentProduction").value.trim();
+  const rawTeam = document.getElementById("projectSpentTeam").value.trim();
   const rawYear = document.getElementById("projectYear").value.trim();
   const rawReleaseDate = (document.getElementById("projectReleaseDateText").value || document.getElementById("projectReleaseDatePicker").value || "").trim();
   const normalizedReleaseDate = normalizeDateInput(rawReleaseDate);
-  const parsedBudget = parseCurrencyInputBRL(rawBudget);
+  const parsedProduction = rawProduction ? parseCurrencyInputBRL(rawProduction) : 0;
+  const parsedTeam = rawTeam ? parseCurrencyInputBRL(rawTeam) : 0;
+  const parsedBudget = (parsedProduction || 0) + (parsedTeam || 0) || null;
   const parsedYear = rawYear === "" ? null : Number(rawYear);
 
   if (rawReleaseDate && !normalizedReleaseDate) {
     alert("Lançamento inválido. Use o calendário ou o formato dd/mm/aaaa.");
     return null;
   }
-  if (rawBudget && parsedBudget === null) {
-    alert("Gasto inválido. Use um valor numérico.");
+  if (rawProduction && parsedProduction === null) {
+    alert("Custo de Produção inválido. Use um valor numérico.");
+    return null;
+  }
+  if (rawTeam && parsedTeam === null) {
+    alert("Cachê de Equipe inválido. Use um valor numérico.");
     return null;
   }
   if (rawYear && (!Number.isInteger(parsedYear) || parsedYear < 1900 || parsedYear > 2100)) {
@@ -4335,6 +4353,8 @@ function collectProjectForm() {
     imdb: document.getElementById("projectFlagImdb").checked,
     infantilContent: document.getElementById("projectFlagInfantil").checked ? "Sim" : "",
     status: document.getElementById("projectStatus").value,
+    spentProduction: parsedProduction || 0,
+    spentTeam: parsedTeam || 0,
     budget: parsedBudget,
     releaseDate: normalizedReleaseDate,
     // Sincroniza com o campo legado para evitar reexibição do valor após limpar.
@@ -5305,6 +5325,16 @@ function summaryIconHtml(icon) {
       <svg viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2h1a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-1v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6zm2 0v14h10V6H6zm12 4v7h1v-7h-1zm-3 3h4v2h-4v-2z"/></svg>
     </span>`;
   }
+  if (icon === "production") {
+    return `<span class="metric-icon metric-icon-blue" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M2 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6zm4 0v10h8V6H6zm10 6v4h2v-4h-2zM9 9h2v6H9V9zm-2 2h2v2H7v-2zm4 0h2v2h-2v-2z"/></svg>
+    </span>`;
+  }
+  if (icon === "team") {
+    return `<span class="metric-icon metric-icon-green" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-4 0-7 2-7 3v1h14v-1c0-1-3-3-7-3zm7-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-.7 0-1.4.1-2 .3A5 5 0 0 1 16 14h6v-1c0-1-2.5-3-6-3z"/></svg>
+    </span>`;
+  }
   return `<span class="metric-icon metric-icon-blue" aria-hidden="true">
     <svg viewBox="0 0 24 24"><path d="M4 4h2v15h14v2H4V4zm4 9h2v4H8v-4zm4-6h2v10h-2V7zm4 3h2v7h-2v-7z"/></svg>
   </span>`;
@@ -5318,6 +5348,13 @@ function cardHtml(title, value, icon = "projects") {
     </div>
     ${summaryIconHtml(icon)}
   </article>`;
+}
+
+function updateProjectSpentTotal() {
+  const production = parseCurrencyInputBRL(document.getElementById("projectSpentProduction")?.value || "") || 0;
+  const team = parseCurrencyInputBRL(document.getElementById("projectSpentTeam")?.value || "") || 0;
+  const totalEl = document.getElementById("projectSpentTotal");
+  if (totalEl) totalEl.textContent = money(production + team);
 }
 
 function inlineSelect(field, projectId, currentValue, options, badgeClass = "") {
