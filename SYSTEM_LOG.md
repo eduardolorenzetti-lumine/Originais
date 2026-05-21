@@ -181,7 +181,34 @@ CREATE INDEX projects_code_idx ON projects(code);
 
 ---
 
-## Estado Atual do Sistema (2026-05-20)
+### [2026-05-21] ~10h00 — FEATURE + BUG_FIX
+**O que foi feito:** Múltiplos ajustes de segurança, roles e funcionalidades da aba Rota.
+
+**Segurança / Auth:**
+- Botão "Primeiro acesso" removido da tela de login (impede cadastro não autorizado via `client.auth.signUp`)
+- Login agora distingue "E-mail não cadastrado" de "Senha incorreta"
+- Fluxo de convite migrado de magic link → Edge Function `set-user-password` (senha provisória definida pelo admin)
+
+**Novo role EDITOR ROTA:**
+- Permissão de leitura geral + edição exclusiva da aba Rota
+- `canEditRoute()` criada: cobre ADMIN, EDITOR e EDITOR ROTA
+- Todas as listas de validação de role atualizadas para incluir "EDITOR ROTA"
+
+**Convite de usuário:**
+- Campo "Senha provisória" adicionado ao dialog de convite (admin define, sistema aplica via Edge Function)
+- Alert exibe credenciais provisórias para o admin repassar ao convidado
+
+**Rota:**
+- Clicar no nome do festival/prêmio na listagem abre o dialog de edição
+- Ícone SVG antes do nome distingue FESTIVAL (calendário) de PRÊMIO (estrela)
+- Novo campo TIPO: seletor FESTIVAL / PRÊMIO no modal de cadastro
+- Novo campo VALOR DE INSCRIÇÃO (R$) no modal de cadastro
+
+**Feito por:** Claude
+
+---
+
+## Estado Atual do Sistema (2026-05-21)
 
 | Métrica                  | Valor              |
 |--------------------------|--------------------|
