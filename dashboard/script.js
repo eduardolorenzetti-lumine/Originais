@@ -1290,7 +1290,14 @@ function applyAuthVisibility() {
 
   const recoveryView = document.getElementById("recoveryView");
   if (recoveryMode && user) {
-    if (recoveryView) recoveryView.hidden = false;
+    if (recoveryView) {
+      recoveryView.hidden = false;
+      // Converter campos para type="password" ao exibir o formulário
+      const rp = document.getElementById("recoveryPassword");
+      const rc = document.getElementById("recoveryPasswordConfirm");
+      if (rp) rp.type = "password";
+      if (rc) rc.type = "password";
+    }
     loginView.hidden = true;
     setLoginPasswordFieldType(false);
     appShell.hidden = true;
@@ -1715,19 +1722,30 @@ function bindDialog() {
 
     if (isRemoteSupabaseAuthEnabled()) {
       try {
+        // 1. Salvar metadados na tabela app_users
         await upsertSecureUserInSupabase(payload);
-        if (payload.password) {
-          if (normalizeUserEmail(payload.email) === normalizeUserEmail(getCurrentAuthEmail())) {
-            // Alteração da própria senha
-            const { error } = await getSupabaseClient().auth.updateUser({ password: payload.password });
-            if (error) throw error;
-          } else if (canManageUsers()) {
-            // Admin definindo senha de outro usuário via Edge Function
-            const { error } = await setUserPasswordAsAdmin(payload.email, payload.password);
-            if (error) throw new Error(error.message || String(error));
-            successMessage = `Usuário salvo com sucesso!\n\nE-mail: ${payload.email}\nSenha provisória: ${payload.password}\nFunção: ${payload.role}\n\nCompartilhe essas credenciais com o usuário. No primeiro login ele será obrigado a criar uma nova senha.`;
-          }
+
+        const isSelf = normalizeUserEmail(payload.email) === normalizeUserEmail(getCurrentAuthEmail());
+
+        if (isSelf && payload.password) {
+          // Próprio usuário alterando a própria senha
+          const { error } = await getSupabaseClient().auth.updateUser({ password: payload.password });
+          if (error) throw error;
+          successMessage = "Senha alterada com sucesso.";
+        } else if (payload.sendInvite) {
+          // Novo usuário sem senha → enviar convite por e-mail
+          const { error } = await setUserPasswordAsAdmin(payload.email, "", { sendInvite: true });
+          if (error) throw new Error(error.message || String(error));
+          successMessage = `Convite enviado para ${payload.email}!\n\nO usuário receberá um e-mail para definir sua senha.`;
+        } else if (canManageUsers() && payload.password && !isSelf) {
+          // Admin definindo/redefinindo senha de outro usuário
+          const { error } = await setUserPasswordAsAdmin(payload.email, payload.password);
+          if (error) throw new Error(error.message || String(error));
+          successMessage = `Usuário salvo!\n\nE-mail: ${payload.email}\nSenha provisória: ${payload.password}\nFunção: ${payload.role}\n\nCompartilhe essas credenciais com o usuário.`;
+        } else {
+          successMessage = "Usuário salvo com sucesso.";
         }
+
         setUserFirstAccessPending(payload.email, Boolean(payload.firstAccessPending), payload.role);
         await refreshSecureUsersFromSupabase({ persist: true });
       } catch (error) {
@@ -4166,76 +4184,109 @@ function openUserDialog(userId = null) {
   const user = state.users.find(
     (item) => String(item.id || "").trim() === userId || normalizeUserEmail(item.email) === normalizedUserId
   );
+  const isNewUser = !user;
+  const isOwnProfile = Boolean(user && current && normalizeUserEmail(current.email) === normalizeUserEmail(user.email));
+
   document.getElementById("userDialogTitle").textContent = user ? (isAdmin ? "Editar Usuário" : "Editar Perfil") : "Cadastrar Usuário";
   document.getElementById("userId").value = user?.id || user?.email || uid();
   document.getElementById("userName").value = user?.name || "";
   const userEmailInput = document.getElementById("userEmail");
   userEmailInput.value = user?.email || "";
   userEmailInput.readOnly = Boolean(isRemoteSupabaseAuthEnabled() && user);
-  // Impede o browser de interpretar o form como tela de login e oferecer salvar senha
-  userEmailInput.autocomplete = "off";
+
   const roleSelect = document.getElementById("userRole");
   roleSelect.value = user?.role || "LEITOR";
   roleSelect.disabled = !isAdmin;
   const roleLabel = roleSelect.closest("label");
   if (roleLabel) roleLabel.hidden = !isAdmin;
-  const passwordInput = document.getElementById("userPassword");
-  const passwordConfirmInput = document.getElementById("userPasswordConfirm");
-  const passwordLabel = passwordInput.closest("label");
-  const passwordConfirmLabel = passwordConfirmInput.closest("label");
-  const passwordLabelText = document.getElementById("userPasswordLabelText");
-  const passwordConfirmLabelText = document.getElementById("userPasswordConfirmLabelText");
-  passwordInput.value = "";
-  passwordConfirmInput.value = "";
-  const passwordHint = document.getElementById("userPasswordHint");
-  const isOwnProfile = Boolean(user && current && normalizeUserEmail(current.email) === normalizeUserEmail(user.email));
-  const isNewUser = !user;
+
+  const pwdInput = document.getElementById("userPassword");
+  const pwdConfirmInput = document.getElementById("userPasswordConfirm");
+  const pwdFields = document.getElementById("userPasswordFields");
+  const toggleRow = document.getElementById("userSetPasswordRow");
+  const toggleChk = document.getElementById("userSetPassword");
+  const pwdHint = document.getElementById("userPasswordHint");
+  const pwdLabelText = document.getElementById("userPasswordLabelText");
+  const pwdConfirmLabelText = document.getElementById("userPasswordConfirmLabelText");
+
+  // Limpar campos
+  pwdInput.value = "";
+  pwdConfirmInput.value = "";
+
   if (isRemoteSupabaseAuthEnabled()) {
-    const showPasswordFields = isOwnProfile || isAdmin;
-    if (passwordLabel) passwordLabel.hidden = !showPasswordFields;
-    if (passwordConfirmLabel) passwordConfirmLabel.hidden = !showPasswordFields;
-    // Desabilita os campos ocultos para evitar auto-preenchimento do browser
-    // e excluí-los da validação nativa do formulário
-    passwordInput.disabled = !showPasswordFields;
-    passwordConfirmInput.disabled = !showPasswordFields;
-    if (passwordLabelText) {
-      passwordLabelText.textContent = isNewUser
-        ? "Senha provisória"
-        : isOwnProfile
-          ? "Nova senha"
-          : "Nova senha provisória";
-    }
-    if (passwordConfirmLabelText) {
-      passwordConfirmLabelText.textContent = isNewUser
-        ? "Confirmar senha provisória"
-        : isOwnProfile
-          ? "Confirmar nova senha"
-          : "Confirmar nova senha provisória";
-    }
-    if (passwordHint) {
-      passwordHint.hidden = false;
-      if (isNewUser) {
-        passwordHint.textContent = "Defina uma senha provisória para o novo usuário. No primeiro login ele será obrigado a criar uma nova senha.";
-      } else if (isOwnProfile) {
-        passwordHint.textContent = "Preencha os campos de acesso apenas se quiser alterar sua senha.";
-      } else if (showPasswordFields) {
-        passwordHint.textContent = "Se preencher, essa senha passa a valer como senha provisória e o usuário será obrigado a trocá-la no próximo acesso.";
-      } else {
-        passwordHint.textContent = "";
+    if (isNewUser && isAdmin) {
+      // Novo usuário: mostrar toggle "Definir senha provisória"
+      if (toggleRow) toggleRow.hidden = false;
+      if (toggleChk) {
+        toggleChk.checked = false;
+        toggleChk.onchange = () => {
+          const show = toggleChk.checked;
+          if (pwdFields) pwdFields.hidden = !show;
+          pwdInput.disabled = !show;
+          pwdConfirmInput.disabled = !show;
+          if (!show) { pwdInput.value = ""; pwdConfirmInput.value = ""; }
+          // Converter para type="password" apenas quando visível
+          pwdInput.type = show ? "password" : "text";
+          pwdConfirmInput.type = show ? "password" : "text";
+        };
       }
+      if (pwdFields) pwdFields.hidden = true;
+      pwdInput.disabled = true;
+      pwdConfirmInput.disabled = true;
+      if (pwdLabelText) pwdLabelText.textContent = "Senha provisória";
+      if (pwdConfirmLabelText) pwdConfirmLabelText.textContent = "Confirmar senha provisória";
+      if (pwdHint) pwdHint.textContent = "Defina uma senha provisória para o novo usuário. No primeiro login ele será obrigado a criar uma nova senha.";
+    } else if (isOwnProfile) {
+      // Próprio perfil: sempre mostra campos de senha
+      if (toggleRow) toggleRow.hidden = true;
+      if (pwdFields) pwdFields.hidden = false;
+      pwdInput.disabled = false;
+      pwdConfirmInput.disabled = false;
+      pwdInput.type = "password";
+      pwdConfirmInput.type = "password";
+      if (pwdLabelText) pwdLabelText.textContent = "Nova senha";
+      if (pwdConfirmLabelText) pwdConfirmLabelText.textContent = "Confirmar nova senha";
+      if (pwdHint) pwdHint.textContent = "Deixe em branco para manter a senha atual.";
+    } else if (isAdmin && user) {
+      // Admin editando outro usuário existente: toggle para redefinir senha
+      if (toggleRow) toggleRow.hidden = false;
+      if (toggleChk) {
+        toggleChk.checked = false;
+        toggleChk.onchange = () => {
+          const show = toggleChk.checked;
+          if (pwdFields) pwdFields.hidden = !show;
+          pwdInput.disabled = !show;
+          pwdConfirmInput.disabled = !show;
+          if (!show) { pwdInput.value = ""; pwdConfirmInput.value = ""; }
+          pwdInput.type = show ? "password" : "text";
+          pwdConfirmInput.type = show ? "password" : "text";
+        };
+      }
+      if (pwdFields) pwdFields.hidden = true;
+      pwdInput.disabled = true;
+      pwdConfirmInput.disabled = true;
+      if (pwdLabelText) pwdLabelText.textContent = "Nova senha provisória";
+      if (pwdConfirmLabelText) pwdConfirmLabelText.textContent = "Confirmar nova senha provisória";
+      if (pwdHint) pwdHint.textContent = "Se preencher, o usuário será obrigado a trocar a senha no próximo acesso.";
+    } else {
+      if (toggleRow) toggleRow.hidden = true;
+      if (pwdFields) pwdFields.hidden = true;
+      pwdInput.disabled = true;
+      pwdConfirmInput.disabled = true;
     }
   } else {
-    if (passwordLabel) passwordLabel.hidden = false;
-    if (passwordConfirmLabel) passwordConfirmLabel.hidden = false;
-    passwordInput.disabled = false;
-    passwordConfirmInput.disabled = false;
-    if (passwordLabelText) passwordLabelText.textContent = "Senha";
-    if (passwordConfirmLabelText) passwordConfirmLabelText.textContent = "Confirmar senha";
-    if (passwordHint) {
-      passwordHint.hidden = !user;
-      passwordHint.textContent = "Deixe os campos de senha em branco para manter a senha atual.";
-    }
+    // Modo local (sem Supabase)
+    if (toggleRow) toggleRow.hidden = true;
+    if (pwdFields) pwdFields.hidden = false;
+    pwdInput.disabled = false;
+    pwdConfirmInput.disabled = false;
+    pwdInput.type = "password";
+    pwdConfirmInput.type = "password";
+    if (pwdLabelText) pwdLabelText.textContent = "Senha";
+    if (pwdConfirmLabelText) pwdConfirmLabelText.textContent = "Confirmar senha";
+    if (pwdHint) pwdHint.textContent = "Deixe em branco para manter a senha atual.";
   }
+
   dialog.showModal();
 }
 
@@ -4278,14 +4329,14 @@ function collectUserForm() {
     return null;
   }
   if (isRemoteSupabaseAuthEnabled()) {
-    if (isNewRemoteUser && !password) {
-      alert("Defina uma senha provisória para o novo usuário.");
-      return null;
-    }
     if (existing?.email && normalizeUserEmail(existing.email) !== email) {
       alert("Para trocar o e-mail, cadastre um novo usuário e desative/exclua o anterior.");
       return null;
     }
+    const toggleChk = document.getElementById("userSetPassword");
+    const usePassword = Boolean(toggleChk?.checked) || isOwnProfile;
+    // Novo usuário sem senha → modo convite por e-mail
+    const sendInvite = isNewRemoteUser && !usePassword;
     const isAdminResettingAnotherUser = Boolean(isAdmin && existing && !isOwnProfile && password);
     const firstAccessPending = isNewRemoteUser || isAdminResettingAnotherUser
       ? true
@@ -4297,7 +4348,8 @@ function collectUserForm() {
       role: isAdmin ? (["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(role) ? role : "LEITOR") : String(existing?.role || current?.role || "LEITOR"),
       active: true,
       invitedAt: existing?.invitedAt || new Date().toISOString(),
-      password: password || "",
+      password: usePassword ? (password || "") : "",
+      sendInvite,
       firstAccessPending
     };
   }
@@ -7123,7 +7175,7 @@ async function upsertSecureUserInSupabase(user) {
   return sanitized;
 }
 
-async function setUserPasswordAsAdmin(targetEmail, password) {
+async function setUserPasswordAsAdmin(targetEmail, password, { sendInvite = false } = {}) {
   const { url, anonKey } = getSupabaseConfig();
   const accessToken = supabaseAuthSession?.access_token;
   if (!url || !accessToken) return { error: new Error("Sessão não encontrada. Faça login novamente.") };
@@ -7137,7 +7189,7 @@ async function setUserPasswordAsAdmin(targetEmail, password) {
         "Authorization": `Bearer ${accessToken}`,
         "apikey": anonKey
       },
-      body: JSON.stringify({ targetEmail, password })
+      body: JSON.stringify({ targetEmail, password, sendInvite })
     });
     const text = await response.text().catch(() => "");
     let data = {};

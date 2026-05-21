@@ -41,10 +41,10 @@
         <h3 style="margin:0 0 4px;font-size:1rem;">Redefinir senha</h3>
         <p style="margin:0 0 16px;font-size:0.85rem;color:var(--text-2)">Crie uma nova senha para sua conta.</p>
         <label>Nova senha
-          <input id="recoveryPassword" type="password" required minlength="6" autocomplete="new-password" placeholder="Mínimo 6 caracteres" />
+          <input id="recoveryPassword" type="text" required minlength="6" autocomplete="off" placeholder="Mínimo 6 caracteres" />
         </label>
         <label>Confirmar nova senha
-          <input id="recoveryPasswordConfirm" type="password" required minlength="6" autocomplete="new-password" />
+          <input id="recoveryPasswordConfirm" type="text" required minlength="6" autocomplete="off" />
         </label>
         <p id="recoveryError" class="login-error" hidden></p>
         <button type="submit" class="btn accent">Salvar nova senha</button>
@@ -607,10 +607,11 @@
       <input type="hidden" id="userId" />
       <div class="form-grid user-form-grid">
         <label>Nome
-          <input id="userName" required />
+          <input id="userName" required autocomplete="off" />
         </label>
         <label>E-mail
-          <input id="userEmail" type="email" required />
+          <!-- type="text" evita que browsers interpretem como campo de login e peçam para salvar senha -->
+          <input id="userEmail" type="text" inputmode="email" required autocomplete="off" />
         </label>
         <label>Função
           <select id="userRole">
@@ -620,14 +621,24 @@
             <option>LEITOR</option>
           </select>
         </label>
-        <label><span id="userPasswordLabelText">Senha</span>
-          <input id="userPassword" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo 6 caracteres" />
-        </label>
-        <label><span id="userPasswordConfirmLabelText">Confirmar senha</span>
-          <input id="userPasswordConfirm" type="password" autocomplete="new-password" minlength="6" />
-        </label>
       </div>
-      <p id="userPasswordHint" class="dialog-hint" hidden>Deixe os campos de senha em branco para manter a senha atual.</p>
+      <!-- Toggle de senha provisória — visível apenas para novos usuários (JS controla) -->
+      <label id="userSetPasswordRow" class="toggle-row" hidden>
+        <span>Definir senha provisória</span>
+        <input type="checkbox" id="userSetPassword" />
+      </label>
+      <div id="userPasswordFields" hidden>
+        <div class="form-grid">
+          <label><span id="userPasswordLabelText">Senha provisória</span>
+            <!-- type="text" → convertido para "password" via JS para evitar prompt "Salvar Senha" -->
+            <input id="userPassword" type="text" autocomplete="off" minlength="6" placeholder="Mínimo 6 caracteres" />
+          </label>
+          <label><span id="userPasswordConfirmLabelText">Confirmar senha provisória</span>
+            <input id="userPasswordConfirm" type="text" autocomplete="off" minlength="6" />
+          </label>
+        </div>
+        <p id="userPasswordHint" class="dialog-hint">Defina uma senha provisória para o novo usuário. No primeiro login ele será obrigado a criar uma nova senha.</p>
+      </div>
       <menu class="dialog-actions">
         <button type="button" id="userCancelBtn" class="btn light">Cancelar</button>
         <button type="submit" class="btn accent">Salvar Usuário</button>
