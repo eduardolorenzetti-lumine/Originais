@@ -67,7 +67,6 @@ const BASE44_FILES = [
 const DEFAULT_ADMIN_EMAIL = "eduardo.lorenzetti@lumine.tv";
 const LEGACY_ADMIN_EMAIL = "admin@originais.com";
 const DEFAULT_ADMIN_PASSWORD = "admin123";
-const DEFAULT_INVITED_PASSWORD = "lumine123";
 const SUPABASE_STATE_TABLE = "app_state";
 const SUPABASE_USERS_TABLE = "app_users";
 const SUPABASE_DEFAULT_STATE_ID = "originais-main";
@@ -506,13 +505,6 @@ function bindGlobalActions() {
     }
     openUserDialog();
   });
-  document.getElementById("btnInviteUser")?.addEventListener("click", () => {
-    if (!canManageUsers()) {
-      alert("Apenas ADMIN pode gerir usuários.");
-      return;
-    }
-    openInviteDialog();
-  });
 
   const refreshFromSupabaseOnReturn = async () => {
     if (!isRemoteSupabaseAuthEnabled() || !supabaseAuthSession?.access_token) return;
@@ -789,7 +781,6 @@ function bindAuthActions() {
 
   const loginForm = document.getElementById("loginForm");
   const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
-  const firstAccessBtn = document.getElementById("firstAccessBtn");
   const profileMenuBtn = document.getElementById("profileMenuBtn");
   const profileMenu = document.getElementById("profileMenu");
   const profileMenuList = document.getElementById("profileMenuList");
@@ -855,11 +846,6 @@ function bindAuthActions() {
   forgotPasswordBtn.addEventListener("click", () => {
     if (isRemoteSupabaseAuthEnabled()) {
       const email = String(document.getElementById("loginEmail").value || "").trim().toLowerCase();
-      const localUser = (state.users || []).find((user) => normalizeUserEmail(user.email) === normalizeUserEmail(email));
-      if (localUser?.firstAccessPending) {
-        showLoginError('Esse usuário ainda não criou a senha. Use "Primeiro acesso".');
-        return;
-      }
       if (supabaseAuthSession?.access_token && normalizeUserEmail(getCurrentAuthEmail()) === email) {
         void promptRemotePasswordSetup({ contextLabel: "redefinir sua senha", required: true });
         return;
@@ -869,8 +855,6 @@ function bindAuthActions() {
     }
     void startForgotPasswordFlow();
   });
-  // firstAccessBtn removido: acesso apenas por convite do admin
-
   profileMenuBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     profileMenuList.hidden = !profileMenuList.hidden;
@@ -903,7 +887,6 @@ function updateLoginModeUi() {
   const passwordInput = document.getElementById("loginPassword");
   const submitButton = document.querySelector("#loginForm button[type='submit']");
   const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
-  const firstAccessBtn = document.getElementById("firstAccessBtn");
   if (isRemoteSupabaseAuthEnabled()) {
     if (passwordLabel) passwordLabel.hidden = false;
     if (passwordInput) passwordInput.required = true;
@@ -915,30 +898,6 @@ function updateLoginModeUi() {
   if (passwordInput) passwordInput.required = true;
   if (submitButton) submitButton.textContent = "Entrar";
   if (forgotPasswordBtn) forgotPasswordBtn.textContent = "Esqueci minha senha!";
-}
-
-async function sendMagicLink(email, { allowCreate = false, showGenericSuccess = false } = {}) {
-  if (!isRemoteSupabaseAuthEnabled()) return false;
-  const normalizedEmail = normalizeUserEmail(email);
-  if (!normalizedEmail) {
-    showLoginError("Informe o e-mail para receber o link de acesso.");
-    return false;
-  }
-  const client = getSupabaseClient();
-  const { error } = await client.auth.signInWithOtp({
-    email: normalizedEmail,
-    options: {
-      shouldCreateUser: allowCreate,
-      emailRedirectTo: `${window.location.origin}${window.location.pathname}`
-    }
-  });
-  if (error) {
-    showLoginError("Não foi possível enviar o link de acesso. Confirme se o e-mail está autorizado.");
-    console.warn("[Originais] Falha ao enviar Magic Link.", error.message || error);
-    return false;
-  }
-  if (showGenericSuccess) showLoginError("Se o e-mail estiver autorizado, enviaremos um link de acesso.", { tone: "success" });
-  return true;
 }
 
 async function signInWithSupabasePassword(email, password) {
@@ -962,7 +921,8 @@ async function signInWithSupabasePassword(email, password) {
   supabaseAuthSession = data?.session || supabaseAuthSession;
   const signedIn = await syncCurrentUserFromSupabaseSession({ persistUsers: true });
   if (!signedIn) return false;
-  setUserFirstAccessPending(normalizedEmail, false);
+  const firstAccessCompleted = await ensureRemoteFirstAccessCompleted(normalizedEmail);
+  if (!firstAccessCompleted) return false;
   persistSessionUser();
   clearLoginError();
   return true;
@@ -990,54 +950,6 @@ async function sendSupabasePasswordReset(email, { showGenericSuccess = false } =
     return false;
   }
   if (showGenericSuccess) showLoginError("Se o e-mail estiver autorizado, enviaremos um link para redefinir sua senha.", { tone: "success" });
-  return true;
-}
-
-async function startRemoteFirstAccess(email, password) {
-  if (!isRemoteSupabaseAuthEnabled()) return false;
-  const normalizedEmail = normalizeUserEmail(email);
-  const rawPassword = String(password || "");
-  if (!normalizedEmail) {
-    showLoginError("Informe o e-mail cadastrado.");
-    return false;
-  }
-  if (!rawPassword || rawPassword.length < 6) {
-    showLoginError('Digite a senha desejada no campo "Senha" (mínimo 6 caracteres) e clique em "Primeiro acesso".');
-    return false;
-  }
-
-  const client = getSupabaseClient();
-  const { data, error } = await client.auth.signUp({
-    email: normalizedEmail,
-    password: rawPassword
-  });
-
-  if (error) {
-    const message = String(error.message || error || "").toLowerCase();
-    if (message.includes("already registered") || message.includes("already been registered") || message.includes("user already registered")) {
-      showLoginError('Esse acesso já foi criado. Faça login normalmente ou use "Esqueci minha senha!".');
-      return false;
-    }
-    showLoginError("Não foi possível concluir o primeiro acesso agora.");
-    console.warn("[Originais] Falha ao concluir primeiro acesso.", error.message || error);
-    return false;
-  }
-
-  if (data?.session) {
-    supabaseAuthSession = data.session;
-    const signedIn = await syncCurrentUserFromSupabaseSession({ persistUsers: true });
-    if (!signedIn) return false;
-    setUserFirstAccessPending(normalizedEmail, false);
-    persistSessionUser();
-    clearLoginError();
-    document.getElementById("loginForm")?.reset();
-    openTab("dashboard");
-    applyAuthVisibility();
-    renderAll();
-    return true;
-  }
-
-  showLoginError("Primeiro acesso concluído. Agora entre com e-mail e senha.", { tone: "success" });
   return true;
 }
 
@@ -1074,6 +986,38 @@ async function promptRemotePasswordSetup({ contextLabel = "definir sua senha", r
   } finally {
     remotePasswordPromptInProgress = false;
   }
+}
+
+async function ensureRemoteFirstAccessCompleted(email = "") {
+  if (!isRemoteSupabaseAuthEnabled()) return true;
+  const normalizedEmail = normalizeUserEmail(email || getCurrentAuthEmail());
+  if (!normalizedEmail) return false;
+  const current = (state.users || []).find((user) => normalizeUserEmail(user?.email) === normalizedEmail) || null;
+  if (!current?.firstAccessPending) return true;
+
+  const completed = await promptRemotePasswordSetup({
+    contextLabel: "trocar sua senha provisória e concluir o primeiro acesso",
+    required: true
+  });
+  if (!completed) {
+    try {
+      await getSupabaseClient().auth.signOut({ scope: "local" });
+    } catch (error) {
+      console.warn("[Originais] Falha ao encerrar sessão após erro no primeiro acesso.", error?.message || error);
+    }
+    clearSupabaseStoredSession();
+    supabaseAuthSession = null;
+    currentUserId = "";
+    persistSessionUser();
+    showLoginError("Não foi possível concluir a troca da senha provisória. Tente novamente.");
+    applyAuthVisibility();
+    renderAll();
+    return false;
+  }
+
+  setUserFirstAccessPending(normalizedEmail, false, current.role);
+  saveState({ skipSupabase: true });
+  return true;
 }
 
 async function syncCurrentUserFromSupabaseSession({ persistUsers = true } = {}) {
@@ -1145,6 +1089,8 @@ function bindSupabaseAuthListener() {
       renderAll();
       return;
     }
+    const firstAccessCompleted = await ensureRemoteFirstAccessCompleted(getCurrentAuthEmail());
+    if (!firstAccessCompleted) return;
     persistSessionUser();
     applyAuthVisibility();
     renderAll();
@@ -1187,6 +1133,13 @@ async function initializeSupabaseAuth() {
   }
   const signedIn = await syncCurrentUserFromSupabaseSession({ persistUsers: true });
   if (!signedIn) {
+    supabaseAuthReady = true;
+    setLoginProcessingState(false);
+    applyAuthVisibility();
+    return;
+  }
+  const firstAccessCompleted = await ensureRemoteFirstAccessCompleted(getCurrentAuthEmail());
+  if (!firstAccessCompleted) {
     supabaseAuthReady = true;
     setLoginProcessingState(false);
     applyAuthVisibility();
@@ -1510,37 +1463,6 @@ async function startForgotPasswordFlow() {
   alert("Senha atualizada com sucesso.");
 }
 
-async function startFirstAccessFlow() {
-  if (isRemoteSupabaseAuthEnabled()) {
-    const email = prompt("Informe o e-mail do convite:");
-    if (!email) return;
-    await sendMagicLink(email, { allowCreate: true, showGenericSuccess: true });
-    return;
-  }
-  const email = prompt("Informe o e-mail do convite:");
-  if (!email) return;
-  const normalizedEmail = String(email).trim().toLowerCase();
-  let user = state.users.find((item) => String(item.email || "").toLowerCase() === normalizedEmail);
-  if (!user) {
-    await refreshStateFromSupabaseNow();
-    user = state.users.find((item) => String(item.email || "").toLowerCase() === normalizedEmail);
-  }
-  if (!user) {
-    alert("E-mail não encontrado.");
-    return;
-  }
-  if (!user.firstAccessPending) {
-    alert("Esse usuário já concluiu o primeiro acesso. Use \"Esqueci minha senha\" se necessário.");
-    return;
-  }
-  const updated = promptPasswordSetup(user, { contextLabel: "primeiro acesso", completeFirstAccess: true });
-  if (!updated) return;
-  document.getElementById("loginEmail").value = user.email || normalizedEmail;
-  document.getElementById("loginPassword").value = "";
-  clearLoginError();
-  alert("Primeiro acesso concluído. Faça login com a nova senha.");
-}
-
 function ensureAdminAccount() {
   if (!Array.isArray(state.users)) state.users = [];
   const normalizedDefaultEmail = DEFAULT_ADMIN_EMAIL.toLowerCase();
@@ -1587,8 +1509,6 @@ function bindDialog() {
   const configItemForm = document.getElementById("configItemForm");
   const userDialog = document.getElementById("userDialog");
   const userForm = document.getElementById("userForm");
-  const inviteDialog = document.getElementById("inviteDialog");
-  const inviteForm = document.getElementById("inviteForm");
   const routeItemDialog = document.getElementById("routeItemDialog");
   const routeItemForm = document.getElementById("routeItemForm");
   const routeProjectDialog = document.getElementById("routeProjectDialog");
@@ -1791,13 +1711,9 @@ function bindDialog() {
     e.preventDefault();
     const payload = collectUserForm();
     if (!payload) return;
+    let successMessage = "Usuário salvo com sucesso.";
 
     if (isRemoteSupabaseAuthEnabled()) {
-      const isNewRemoteUser = !state.users.some(
-        (user) =>
-          String(user.id || "").trim() === payload.id ||
-          normalizeUserEmail(user.email) === normalizeUserEmail(payload.email)
-      );
       try {
         await upsertSecureUserInSupabase(payload);
         if (payload.password) {
@@ -1809,6 +1725,7 @@ function bindDialog() {
             // Admin definindo senha de outro usuário via Edge Function
             const { error } = await setUserPasswordAsAdmin(payload.email, payload.password);
             if (error) throw new Error(error.message || String(error));
+            successMessage = `Usuário salvo com sucesso!\n\nE-mail: ${payload.email}\nSenha provisória: ${payload.password}\nFunção: ${payload.role}\n\nCompartilhe essas credenciais com o usuário. No primeiro login ele será obrigado a criar uma nova senha.`;
           }
         }
         setUserFirstAccessPending(payload.email, Boolean(payload.firstAccessPending), payload.role);
@@ -1834,76 +1751,7 @@ function bindDialog() {
     userDialog.close();
     renderUsers();
     applyAuthVisibility();
-  });
-
-  document.getElementById("inviteCancelBtn").addEventListener("click", () => inviteDialog.close());
-  inviteForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (!canManageUsers()) {
-      alert("Apenas ADMIN pode gerir usuários.");
-      inviteDialog.close();
-      return;
-    }
-    const payload = collectInviteForm();
-    if (!payload) return;
-    if (isRemoteSupabaseAuthEnabled()) {
-      try {
-        // 1. Criar/atualizar usuário na tabela app_users
-        await upsertSecureUserInSupabase({
-          id: payload.email,
-          name: displayNameFromEmail(payload.email),
-          email: payload.email,
-          role: payload.role,
-          active: true,
-          invitedAt: new Date().toISOString()
-        });
-        // 2. Definir senha provisória via Edge Function
-        const { error: pwError } = await setUserPasswordAsAdmin(payload.email, payload.password);
-        if (pwError) {
-          alert(`Usuário salvo, mas não foi possível definir a senha provisória: ${pwError.message}\n\nO usuário poderá usar "Esqueci minha senha" para criar a própria senha.`);
-        } else {
-          alert(`Usuário convidado com sucesso!\n\nE-mail: ${payload.email}\nSenha provisória: ${payload.password}\nFunção: ${payload.role}\n\nCompartilhe essas credenciais com o usuário.`);
-        }
-        await refreshSecureUsersFromSupabase({ persist: true });
-      } catch (error) {
-        alert("Não foi possível convidar o usuário: " + (error?.message || error));
-        console.warn("[Originais] Falha ao convidar usuário via Supabase.", error?.message || error);
-        return;
-      }
-      renderUsers();
-      inviteDialog.close();
-      return;
-    }
-    const inviteLink = buildUserInviteLink(payload.email, payload.role, payload.password);
-    const existingIdx = state.users.findIndex((user) => String(user.email || "").toLowerCase() === payload.email);
-    const invitedAt = new Date().toISOString().slice(0, 10);
-    const passwordHash = hashPassword(payload.password || DEFAULT_INVITED_PASSWORD);
-    if (existingIdx >= 0) {
-      const existing = state.users[existingIdx];
-      state.users[existingIdx] = {
-        ...existing,
-        name: String(existing.name || "").trim() || displayNameFromEmail(payload.email),
-        email: payload.email,
-        role: payload.role,
-        invitedAt,
-        passwordHash,
-        firstAccessPending: true
-      };
-    } else {
-      state.users.push({
-        id: uid(),
-        name: displayNameFromEmail(payload.email),
-        email: payload.email,
-        role: payload.role,
-        passwordHash,
-        invitedAt,
-        firstAccessPending: true
-      });
-    }
-    saveState();
-    renderUsers();
-    inviteDialog.close();
-    window.location.href = inviteLink;
+    alert(successMessage);
   });
 
   document.getElementById("btnCancelRouteProject")?.addEventListener("click", () => routeProjectDialog.close());
@@ -4198,7 +4046,9 @@ function renderUsers() {
       const invitedAt = user.invitedAt ? formatDatePtBr(user.invitedAt) : "";
       const inviteText = invitedAt ? `Convidado em ${invitedAt}` : "Sem convite";
       const passwordState = isRemoteSupabaseAuthEnabled()
-        ? "Senha"
+        ? user.firstAccessPending
+          ? "Provisória"
+          : "Definida"
         : user.firstAccessPending
           ? "Primeiro acesso"
           : user.passwordHash
@@ -4333,26 +4183,45 @@ function openUserDialog(userId = null) {
   const passwordConfirmInput = document.getElementById("userPasswordConfirm");
   const passwordLabel = passwordInput.closest("label");
   const passwordConfirmLabel = passwordConfirmInput.closest("label");
+  const passwordLabelText = document.getElementById("userPasswordLabelText");
+  const passwordConfirmLabelText = document.getElementById("userPasswordConfirmLabelText");
   passwordInput.value = "";
   passwordConfirmInput.value = "";
   const passwordHint = document.getElementById("userPasswordHint");
+  const isOwnProfile = Boolean(user && current && normalizeUserEmail(current.email) === normalizeUserEmail(user.email));
+  const isNewUser = !user;
   if (isRemoteSupabaseAuthEnabled()) {
-    const isOwnProfile = Boolean(user && current && normalizeUserEmail(current.email) === normalizeUserEmail(user.email));
-    const showPasswordFields = isOwnProfile || (isAdmin && Boolean(user));
+    const showPasswordFields = isOwnProfile || isAdmin;
     if (passwordLabel) passwordLabel.hidden = !showPasswordFields;
     if (passwordConfirmLabel) passwordConfirmLabel.hidden = !showPasswordFields;
     // Desabilita os campos ocultos para evitar auto-preenchimento do browser
     // e excluí-los da validação nativa do formulário
     passwordInput.disabled = !showPasswordFields;
     passwordConfirmInput.disabled = !showPasswordFields;
+    if (passwordLabelText) {
+      passwordLabelText.textContent = isNewUser
+        ? "Senha provisória"
+        : isOwnProfile
+          ? "Nova senha"
+          : "Nova senha provisória";
+    }
+    if (passwordConfirmLabelText) {
+      passwordConfirmLabelText.textContent = isNewUser
+        ? "Confirmar senha provisória"
+        : isOwnProfile
+          ? "Confirmar nova senha"
+          : "Confirmar nova senha provisória";
+    }
     if (passwordHint) {
       passwordHint.hidden = false;
-      if (isOwnProfile) {
+      if (isNewUser) {
+        passwordHint.textContent = "Defina uma senha provisória para o novo usuário. No primeiro login ele será obrigado a criar uma nova senha.";
+      } else if (isOwnProfile) {
         passwordHint.textContent = "Preencha os campos de acesso apenas se quiser alterar sua senha.";
       } else if (showPasswordFields) {
-        passwordHint.textContent = "Defina uma nova senha para este usuário (opcional). Deixe em branco para manter a senha atual.";
+        passwordHint.textContent = "Se preencher, essa senha passa a valer como senha provisória e o usuário será obrigado a trocá-la no próximo acesso.";
       } else {
-        passwordHint.textContent = 'O usuário definirá a própria senha no botão "Primeiro acesso".';
+        passwordHint.textContent = "";
       }
     }
   } else {
@@ -4360,6 +4229,8 @@ function openUserDialog(userId = null) {
     if (passwordConfirmLabel) passwordConfirmLabel.hidden = false;
     passwordInput.disabled = false;
     passwordConfirmInput.disabled = false;
+    if (passwordLabelText) passwordLabelText.textContent = "Senha";
+    if (passwordConfirmLabelText) passwordConfirmLabelText.textContent = "Confirmar senha";
     if (passwordHint) {
       passwordHint.hidden = !user;
       passwordHint.textContent = "Deixe os campos de senha em branco para manter a senha atual.";
@@ -4384,6 +4255,8 @@ function collectUserForm() {
   const role = document.getElementById("userRole").value;
   const password = document.getElementById("userPassword").value;
   const passwordConfirm = document.getElementById("userPasswordConfirm").value;
+  const isOwnProfile = Boolean(existing && current && normalizeUserEmail(current.email) === normalizeUserEmail(existing.email));
+  const isNewRemoteUser = isRemoteSupabaseAuthEnabled() && !existing;
   if (!name || !email) {
     alert("Preencha nome e e-mail.");
     return null;
@@ -4405,10 +4278,18 @@ function collectUserForm() {
     return null;
   }
   if (isRemoteSupabaseAuthEnabled()) {
+    if (isNewRemoteUser && !password) {
+      alert("Defina uma senha provisória para o novo usuário.");
+      return null;
+    }
     if (existing?.email && normalizeUserEmail(existing.email) !== email) {
       alert("Para trocar o e-mail, cadastre um novo usuário e desative/exclua o anterior.");
       return null;
     }
+    const isAdminResettingAnotherUser = Boolean(isAdmin && existing && !isOwnProfile && password);
+    const firstAccessPending = isNewRemoteUser || isAdminResettingAnotherUser
+      ? true
+      : Boolean(existing?.firstAccessPending);
     return {
       id: existing?.id || email,
       name,
@@ -4417,8 +4298,7 @@ function collectUserForm() {
       active: true,
       invitedAt: existing?.invitedAt || new Date().toISOString(),
       password: password || "",
-      // Se admin definiu uma senha, o usuário não precisa mais fazer "Primeiro acesso"
-      firstAccessPending: existing ? (password ? false : Boolean(existing.firstAccessPending)) : !Boolean(password)
+      firstAccessPending
     };
   }
   if ((!existing || !existing.passwordHash) && !password) {
@@ -4436,41 +4316,6 @@ function collectUserForm() {
   };
 }
 
-function openInviteDialog() {
-  if (!canManageUsers()) {
-    alert("Apenas ADMIN pode gerir usuários.");
-    return;
-  }
-  document.getElementById("inviteEmail").value = "";
-  document.getElementById("inviteRole").value = "LEITOR";
-  const pwField = document.getElementById("invitePassword");
-  if (pwField) pwField.value = "";
-  document.getElementById("inviteDialog").showModal();
-}
-
-function collectInviteForm() {
-  const email = document.getElementById("inviteEmail").value.trim().toLowerCase();
-  const role = document.getElementById("inviteRole").value;
-  const password = String(document.getElementById("invitePassword")?.value || "").trim();
-  if (!email) {
-    alert("Preencha o e-mail.");
-    return null;
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    alert("E-mail inválido.");
-    return null;
-  }
-  if (password && password.length < 6) {
-    alert("A senha provisória deve ter no mínimo 6 caracteres.");
-    return null;
-  }
-  return {
-    email,
-    role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(role) ? role : "LEITOR",
-    password: password || DEFAULT_INVITED_PASSWORD
-  };
-}
-
 function displayNameFromEmail(email) {
   const value = String(email || "").trim();
   if (!value.includes("@")) return "Usuário convidado";
@@ -4482,15 +4327,6 @@ function displayNameFromEmail(email) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-function buildUserInviteLink(email, role, password = DEFAULT_INVITED_PASSWORD) {
-  const subject = encodeURIComponent("Convite de acesso - Originais Lumine");
-  const platformLink = "https://originais.lumine.tv/dashboard/";
-  const body = encodeURIComponent(
-    `Você foi convidado para o sistema Originais Lumine.\n\nFunção: ${role}\nE-mail: ${email}\nSenha inicial: ${password}\n\nAcesse a plataforma: ${platformLink}`
-  );
-  return `mailto:${encodeURIComponent(email)}?subject=${subject}&body=${body}`;
 }
 
 function openProjectDialog(projectId = null) {

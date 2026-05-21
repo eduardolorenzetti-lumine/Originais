@@ -620,10 +620,10 @@
             <option>LEITOR</option>
           </select>
         </label>
-        <label>Senha
+        <label><span id="userPasswordLabelText">Senha</span>
           <input id="userPassword" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo 6 caracteres" />
         </label>
-        <label>Confirmar senha
+        <label><span id="userPasswordConfirmLabelText">Confirmar senha</span>
           <input id="userPasswordConfirm" type="password" autocomplete="new-password" minlength="6" />
         </label>
       </div>
@@ -631,30 +631,6 @@
       <menu class="dialog-actions">
         <button type="button" id="userCancelBtn" class="btn light">Cancelar</button>
         <button type="submit" class="btn accent">Salvar Usuário</button>
-      </menu>
-    </form>
-  </dialog>
-
-  <dialog id="inviteDialog">
-    <form id="inviteForm" method="dialog">
-      <h3>Convidar Usuário</h3>
-      <label>E-mail
-        <input id="inviteEmail" type="email" required placeholder="email@dominio.com" />
-      </label>
-      <label>Função
-        <select id="inviteRole">
-          <option value="LEITOR">LEITOR</option>
-          <option value="EDITOR ROTA">EDITOR ROTA</option>
-          <option value="EDITOR">EDITOR</option>
-          <option value="ADMIN">ADMIN</option>
-        </select>
-      </label>
-      <label>Senha provisória
-        <input id="invitePassword" type="text" autocomplete="off" placeholder="Mínimo 6 caracteres" />
-      </label>
-      <menu class="dialog-actions">
-        <button type="button" id="inviteCancelBtn" class="btn light">Cancelar</button>
-        <button type="submit" class="btn accent">Convidar</button>
       </menu>
     </form>
   </dialog>

@@ -208,6 +208,14 @@ CREATE INDEX projects_code_idx ON projects(code);
 
 ---
 
+### [2026-05-21] ~14h03 — BUG_FIX + REFACTOR
+**O que foi feito:** Limpeza do fluxo legado de "Primeiro acesso" no frontend do dashboard e unificação do cadastro de usuários com senha provisória no modal principal `Cadastrar Usuário`.
+**Motivo / Contexto:** O campo `Senha provisória` havia sido implementado apenas em um modal secundário de convite que não estava mais exposto na interface, enquanto o fluxo principal de cadastro continuava exibindo campos genéricos de senha. Além disso, o usuário remoto não era forçado de forma consistente a trocar a senha provisória no primeiro login.
+**Impacto:** O modal principal de cadastro agora exibe `Senha provisória` para novos usuários e `Nova senha provisória` ao redefinir acesso de terceiros. Novos usuários remotos passam a exigir senha provisória no cadastro, a listagem de usuários mostra o estado `Provisória`/`Definida`, e o primeiro login com senha provisória obriga a criação imediata de uma nova senha antes de liberar o acesso. Também foram removidos do código o modal antigo de convite e funções mortas relacionadas a magic link / primeiro acesso legado.
+**Feito por:** Codex
+
+---
+
 ## Estado Atual do Sistema (2026-05-21)
 
 | Métrica                  | Valor              |
