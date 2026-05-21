@@ -1888,6 +1888,34 @@ tbody tr:hover {
   text-overflow: ellipsis;
 }
 
+.route-item-title-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 2px;
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+
+.route-item-title-link:hover {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
+}
+
+.route-type-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.route-type-icon-festival {
+  color: var(--accent);
+}
+
+.route-type-icon-premio {
+  color: #f59e0b;
+}
+
 .route-project-actions {
   display: inline-flex;
   align-items: center;

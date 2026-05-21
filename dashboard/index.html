@@ -76,7 +76,6 @@
         <button type="submit" class="btn accent">Entrar</button>
         <div class="login-help-actions">
           <button id="forgotPasswordBtn" type="button" class="login-help-btn">Esqueci minha senha!</button>
-          <button id="firstAccessBtn" type="button" class="login-help-btn">Primeiro acesso</button>
         </div>
       </form>
     </div>
@@ -617,6 +616,7 @@
           <select id="userRole">
             <option>ADMIN</option>
             <option>EDITOR</option>
+            <option>EDITOR ROTA</option>
             <option>LEITOR</option>
           </select>
         </label>
@@ -644,13 +644,17 @@
       <label>Função
         <select id="inviteRole">
           <option value="LEITOR">LEITOR</option>
+          <option value="EDITOR ROTA">EDITOR ROTA</option>
           <option value="EDITOR">EDITOR</option>
           <option value="ADMIN">ADMIN</option>
         </select>
       </label>
+      <label>Senha provisória
+        <input id="invitePassword" type="text" autocomplete="off" placeholder="Mínimo 6 caracteres" />
+      </label>
       <menu class="dialog-actions">
         <button type="button" id="inviteCancelBtn" class="btn light">Cancelar</button>
-        <button type="submit" class="btn soft">Enviar Convite</button>
+        <button type="submit" class="btn accent">Convidar</button>
       </menu>
     </form>
   </dialog>
@@ -665,8 +669,18 @@
         <label>Festival / Prêmio
           <input id="routeItemName" required />
         </label>
+        <label>Tipo
+          <select id="routeItemType">
+            <option value="">—</option>
+            <option value="FESTIVAL">Festival</option>
+            <option value="PRÊMIO">Prêmio</option>
+          </select>
+        </label>
         <label>Status
           <select id="routeItemStatus"></select>
+        </label>
+        <label>Valor de Inscrição (R$)
+          <input id="routeItemFee" type="text" inputmode="decimal" placeholder="R$ 0,00" />
         </label>
         <label>País
           <input id="routeItemCountry" />

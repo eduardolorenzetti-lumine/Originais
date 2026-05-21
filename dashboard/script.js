@@ -811,6 +811,11 @@ function bindAuthActions() {
           return;
         }
       }
+      const knownEmails = (state.users || []).map((u) => normalizeUserEmail(u.email));
+      if (knownEmails.length && !knownEmails.includes(email)) {
+        showLoginError("E-mail não cadastrado no sistema. Entre em contato com o administrador.");
+        return;
+      }
       const signedIn = await signInWithSupabasePassword(email, password);
       if (!signedIn) return;
       loginForm.reset();
@@ -826,7 +831,8 @@ function bindAuthActions() {
       user = authenticateUser(email, password);
     }
     if (!user) {
-      showLoginError("E-mail ou senha inválidos.");
+      const emailExists = (state.users || []).some((u) => normalizeUserEmail(u.email) === email);
+      showLoginError(emailExists ? "Senha incorreta." : "E-mail não cadastrado no sistema. Entre em contato com o administrador.");
       return;
     }
     if (user.firstAccessPending) {
@@ -863,15 +869,7 @@ function bindAuthActions() {
     }
     void startForgotPasswordFlow();
   });
-  firstAccessBtn?.addEventListener("click", () => {
-    if (isRemoteSupabaseAuthEnabled()) {
-      const email = String(document.getElementById("loginEmail").value || "").trim().toLowerCase();
-      const password = String(document.getElementById("loginPassword").value || "");
-      void startRemoteFirstAccess(email, password);
-      return;
-    }
-    void startFirstAccessFlow();
-  });
+  // firstAccessBtn removido: acesso apenas por convite do admin
 
   profileMenuBtn.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -911,14 +909,12 @@ function updateLoginModeUi() {
     if (passwordInput) passwordInput.required = true;
     if (submitButton) submitButton.textContent = "Entrar";
     if (forgotPasswordBtn) forgotPasswordBtn.textContent = "Esqueci minha senha!";
-    if (firstAccessBtn) firstAccessBtn.hidden = false;
     return;
   }
   if (passwordLabel) passwordLabel.hidden = false;
   if (passwordInput) passwordInput.required = true;
   if (submitButton) submitButton.textContent = "Entrar";
   if (forgotPasswordBtn) forgotPasswordBtn.textContent = "Esqueci minha senha!";
-  if (firstAccessBtn) firstAccessBtn.hidden = false;
 }
 
 async function sendMagicLink(email, { allowCreate = false, showGenericSuccess = false } = {}) {
@@ -1272,7 +1268,12 @@ function canManageUsers() {
 
 function canEditContent() {
   const role = getCurrentUserRole();
-  return role === "ADMIN" || role === "EDITOR" || role.includes("ADMIN") || role.includes("EDIT");
+  return role === "ADMIN" || role === "EDITOR" || role.includes("ADMIN");
+}
+
+function canEditRoute() {
+  const role = getCurrentUserRole();
+  return role === "ADMIN" || role === "EDITOR" || role === "EDITOR ROTA" || role.includes("ADMIN");
 }
 
 function canViewUsers() {
@@ -1847,6 +1848,7 @@ function bindDialog() {
     if (!payload) return;
     if (isRemoteSupabaseAuthEnabled()) {
       try {
+        // 1. Criar/atualizar usuário na tabela app_users
         await upsertSecureUserInSupabase({
           id: payload.email,
           name: displayNameFromEmail(payload.email),
@@ -1855,15 +1857,16 @@ function bindDialog() {
           active: true,
           invitedAt: new Date().toISOString()
         });
-        await refreshSecureUsersFromSupabase({ persist: true });
-        const sent = await sendMagicLink(payload.email, { allowCreate: true });
-        if (!sent) {
-          alert("Usuário salvo, mas o e-mail do Magic Link não pôde ser enviado.");
+        // 2. Definir senha provisória via Edge Function
+        const { error: pwError } = await setUserPasswordAsAdmin(payload.email, payload.password);
+        if (pwError) {
+          alert(`Usuário salvo, mas não foi possível definir a senha provisória: ${pwError.message}\n\nO usuário poderá usar "Esqueci minha senha" para criar a própria senha.`);
         } else {
-          alert("Convite enviado por e-mail com sucesso. O usuário definirá a senha no primeiro acesso.");
+          alert(`Usuário convidado com sucesso!\n\nE-mail: ${payload.email}\nSenha provisória: ${payload.password}\nFunção: ${payload.role}\n\nCompartilhe essas credenciais com o usuário.`);
         }
+        await refreshSecureUsersFromSupabase({ persist: true });
       } catch (error) {
-        alert("Não foi possível convidar o usuário.");
+        alert("Não foi possível convidar o usuário: " + (error?.message || error));
         console.warn("[Originais] Falha ao convidar usuário via Supabase.", error?.message || error);
         return;
       }
@@ -1871,10 +1874,10 @@ function bindDialog() {
       inviteDialog.close();
       return;
     }
-    const inviteLink = buildUserInviteLink(payload.email, payload.role);
+    const inviteLink = buildUserInviteLink(payload.email, payload.role, payload.password);
     const existingIdx = state.users.findIndex((user) => String(user.email || "").toLowerCase() === payload.email);
     const invitedAt = new Date().toISOString().slice(0, 10);
-    const passwordHash = hashPassword(DEFAULT_INVITED_PASSWORD);
+    const passwordHash = hashPassword(payload.password || DEFAULT_INVITED_PASSWORD);
     if (existingIdx >= 0) {
       const existing = state.users[existingIdx];
       state.users[existingIdx] = {
@@ -1907,6 +1910,10 @@ function bindDialog() {
   routeProjectForm?.addEventListener("submit", (e) => {
     e.preventDefault();
     if (!canEditContent()) {
+      alert("Perfil LEITOR possui apenas visualização.");
+      return;
+    }
+    if (!canEditRoute()) {
       alert("Perfil LEITOR possui apenas visualização.");
       return;
     }
@@ -3954,7 +3961,7 @@ function renderRoute() {
   if (filtersPanel) filtersPanel.hidden = !routeFiltersOpen;
   setFilterToggleButton(filterButton, routeFiltersOpen);
 
-  const editable = canEditContent();
+  const editable = canEditRoute();
   const query = normalizeSearchText(routeSearchQuery);
   const projects = getRouteSelectedProjects();
   const routeStatuses = uniq(state.settings.routeStatuses || []).filter(Boolean);
@@ -4072,7 +4079,14 @@ function renderRoute() {
           <td>
             <div class="route-item-title-wrap">
               <span class="route-item-indent"></span>
-              <span class="route-item-title">${escapeHtml(item.name || "")}</span>
+              ${item.type === "PRÊMIO"
+                ? `<svg class="route-type-icon route-type-icon-premio" viewBox="0 0 20 20" aria-label="Prêmio"><path d="M10 2l1.8 3.6 4 .6-2.9 2.8.7 4L10 11l-3.6 1.9.7-4L4.2 6.2l4-.6L10 2z" fill="currentColor"/></svg>`
+                : `<svg class="route-type-icon route-type-icon-festival" viewBox="0 0 20 20" aria-label="Festival"><rect x="2" y="5" width="16" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 5V4a1 1 0 0 1 2 0v1M12 5V4a1 1 0 0 1 2 0v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 9h16" stroke="currentColor" stroke-width="1.5"/></svg>`
+              }
+              ${editable
+                ? `<span class="route-item-title route-item-title-link" role="button" tabindex="0" data-route-action="edit" data-id="${item.id}">${escapeHtml(item.name || "")}</span>`
+                : `<span class="route-item-title">${escapeHtml(item.name || "")}</span>`
+              }
             </div>
           </td>
           <td>${editable ? routeInlineSelect("status", item.id, item.status, routeStatuses) : renderRouteStatusBadge(item.status)}</td>
@@ -4126,6 +4140,7 @@ function renderRoute() {
     });
     body.querySelectorAll("[data-route-action='edit']").forEach((btn) => {
       btn.addEventListener("click", () => openRouteItemDialog(btn.dataset.id));
+      btn.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRouteItemDialog(btn.dataset.id); } });
     });
     body.querySelectorAll("[data-route-action='del']").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -4398,7 +4413,7 @@ function collectUserForm() {
       id: existing?.id || email,
       name,
       email,
-      role: isAdmin ? (["ADMIN", "EDITOR", "LEITOR"].includes(role) ? role : "LEITOR") : String(existing?.role || current?.role || "LEITOR"),
+      role: isAdmin ? (["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(role) ? role : "LEITOR") : String(existing?.role || current?.role || "LEITOR"),
       active: true,
       invitedAt: existing?.invitedAt || new Date().toISOString(),
       password: password || "",
@@ -4414,7 +4429,7 @@ function collectUserForm() {
     id,
     name,
     email,
-    role: isAdmin ? (["ADMIN", "EDITOR", "LEITOR"].includes(role) ? role : "LEITOR") : String(existing?.role || current?.role || "LEITOR"),
+    role: isAdmin ? (["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(role) ? role : "LEITOR") : String(existing?.role || current?.role || "LEITOR"),
     passwordHash: password ? hashPassword(password) : String(existing?.passwordHash || ""),
     invitedAt: existing?.invitedAt || new Date().toISOString().slice(0, 10),
     firstAccessPending: password ? false : Boolean(existing?.firstAccessPending)
@@ -4428,12 +4443,15 @@ function openInviteDialog() {
   }
   document.getElementById("inviteEmail").value = "";
   document.getElementById("inviteRole").value = "LEITOR";
+  const pwField = document.getElementById("invitePassword");
+  if (pwField) pwField.value = "";
   document.getElementById("inviteDialog").showModal();
 }
 
 function collectInviteForm() {
   const email = document.getElementById("inviteEmail").value.trim().toLowerCase();
   const role = document.getElementById("inviteRole").value;
+  const password = String(document.getElementById("invitePassword")?.value || "").trim();
   if (!email) {
     alert("Preencha o e-mail.");
     return null;
@@ -4442,9 +4460,14 @@ function collectInviteForm() {
     alert("E-mail inválido.");
     return null;
   }
+  if (password && password.length < 6) {
+    alert("A senha provisória deve ter no mínimo 6 caracteres.");
+    return null;
+  }
   return {
     email,
-    role: ["ADMIN", "EDITOR", "LEITOR"].includes(role) ? role : "LEITOR"
+    role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(role) ? role : "LEITOR",
+    password: password || DEFAULT_INVITED_PASSWORD
   };
 }
 
@@ -4461,11 +4484,11 @@ function displayNameFromEmail(email) {
     .join(" ");
 }
 
-function buildUserInviteLink(email, role) {
+function buildUserInviteLink(email, role, password = DEFAULT_INVITED_PASSWORD) {
   const subject = encodeURIComponent("Convite de acesso - Originais Lumine");
-  const platformLink = getPlatformLink();
+  const platformLink = "https://originais.lumine.tv/dashboard/";
   const body = encodeURIComponent(
-    `Você foi convidado para o sistema Originais Lumine.\n\nFunção: ${role}\nE-mail: ${email}\nSenha inicial: ${DEFAULT_INVITED_PASSWORD}\n\nNo primeiro acesso, clique em "Primeiro acesso" para criar sua senha.\n\nAcesse a plataforma: ${platformLink}`
+    `Você foi convidado para o sistema Originais Lumine.\n\nFunção: ${role}\nE-mail: ${email}\nSenha inicial: ${password}\n\nAcesse a plataforma: ${platformLink}`
   );
   return `mailto:${encodeURIComponent(email)}?subject=${subject}&body=${body}`;
 }
@@ -4608,7 +4631,7 @@ function collectProjectForm() {
 }
 
 function openRouteItemDialog(routeItemId = null, forcedProjectId = "") {
-  if (!canEditContent()) {
+  if (!canEditRoute()) {
     alert("Perfil LEITOR possui apenas visualização.");
     return;
   }
@@ -4626,6 +4649,8 @@ function openRouteItemDialog(routeItemId = null, forcedProjectId = "") {
   document.getElementById("routeItemId").value = item?.id || uid();
   document.getElementById("routeProjectId").value = selectedProjectId;
   document.getElementById("routeItemName").value = item?.name || "";
+  document.getElementById("routeItemType").value = item?.type || "";
+  document.getElementById("routeItemFee").value = formatCurrencyInputBRL(item?.fee ?? null);
   document.getElementById("routeItemCountry").value = item?.country || "";
   document.getElementById("routeItemDeadline").value = normalizeDateInput(item?.submissionDeadline || "");
   document.getElementById("routeItemResultDate").value = normalizeDateInput(item?.resultDate || "");
@@ -4662,10 +4687,14 @@ function collectRouteItemForm() {
   };
   if (!validateUrl(noticeUrl, "Edital")) return null;
   if (!validateUrl(driveUrl, "Drive / URL")) return null;
+  const rawFee = String(document.getElementById("routeItemFee").value || "").trim();
+  const fee = rawFee ? parseCurrencyInputBRL(rawFee) : null;
   return {
     id: String(document.getElementById("routeItemId").value || "").trim() || uid(),
     projectId,
     name,
+    type: document.getElementById("routeItemType").value || "",
+    fee: fee != null && !isNaN(fee) ? fee : null,
     status: document.getElementById("routeItemStatus").value,
     country: String(document.getElementById("routeItemCountry").value || "").trim(),
     submissionDeadline: deadline,
@@ -6534,7 +6563,7 @@ function sanitizeUserForState(user) {
     id: String(user.id || email).trim() || email,
     name: String(user.name || "").trim() || displayNameFromEmail(email),
     email,
-    role: ["ADMIN", "EDITOR", "LEITOR"].includes(String(user.role || "").trim().toUpperCase())
+    role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(String(user.role || "").trim().toUpperCase())
       ? String(user.role || "").trim().toUpperCase()
       : "LEITOR",
     active: user.active !== false,
@@ -6557,7 +6586,7 @@ function setUserFirstAccessPending(email, pending, role = "") {
     id: normalizedEmail,
     name: displayNameFromEmail(normalizedEmail),
     email: normalizedEmail,
-    role: ["ADMIN", "EDITOR", "LEITOR"].includes(String(role || "").trim().toUpperCase()) ? String(role).trim().toUpperCase() : "LEITOR",
+    role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(String(role || "").trim().toUpperCase()) ? String(role).trim().toUpperCase() : "LEITOR",
     active: true,
     invitedAt: new Date().toISOString(),
     firstAccessPending: Boolean(pending)
@@ -7575,7 +7604,7 @@ function mergeState(parsed) {
           id: user.id || uid(),
           name: String(user.name || "").trim(),
           email: String(user.email || "").trim().toLowerCase(),
-          role: ["ADMIN", "EDITOR", "LEITOR"].includes(user.role) ? user.role : "LEITOR",
+          role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(user.role) ? user.role : "LEITOR",
           passwordHash:
             String(user.passwordHash || "").trim() ||
             (
@@ -7630,7 +7659,7 @@ function seedState() {
           id: user.id || uid(),
           name: String(user.name || "").trim(),
           email: String(user.email || "").trim().toLowerCase(),
-          role: ["ADMIN", "EDITOR", "LEITOR"].includes(user.role) ? user.role : "LEITOR",
+          role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(user.role) ? user.role : "LEITOR",
           passwordHash:
             String(user.passwordHash || "").trim() ||
             (
