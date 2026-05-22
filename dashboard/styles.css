@@ -305,6 +305,28 @@ body {
   cursor: pointer;
 }
 
+/* Logo no nav */
+.nav-logo-img {
+  height: 16px;
+  width: auto;
+  display: block;
+}
+
+/* Nav links — contraste, tamanho e peso melhorados */
+.nav-link {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  font-weight: 500;
+}
+.nav-link:hover {
+  color: var(--white);
+}
+.nav-link.active {
+  color: var(--yellow);
+  background: rgba(245, 230, 0, 0.15);
+  font-weight: 700;
+}
+
 .content { display: contents; } /* legacy — migrated to .page */
 
 .page {
