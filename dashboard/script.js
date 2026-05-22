@@ -5511,11 +5511,9 @@ function summaryIconHtml(icon) {
 }
 
 function cardHtml(title, value, icon = "projects") {
-  return `<article class="card metric-card">
-    <div class="metric-content">
-      <span>${escapeHtml(title)}</span>
-      <strong>${escapeHtml(value)}</strong>
-    </div>
+  return `<article class="stat-card highlight">
+    <div class="stat-label">${escapeHtml(title)}</div>
+    <div class="stat-value">${escapeHtml(value)}</div>
     ${summaryIconHtml(icon)}
   </article>`;
 }
