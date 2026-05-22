@@ -216,6 +216,20 @@ CREATE INDEX projects_code_idx ON projects(code);
 
 ---
 
+---
+
+### [2026-05-21] ~17h30 — REFACTOR
+**O que foi feito:** Migração visual para o novo design system Lumine (branch `redesign`).
+**Mudanças:**
+- Adicionado `dashboard/lumine-design-system.css` (2474 linhas — design system completo: Satoshi font, tokens `--yellow`/`--black`/`--off-white`, componentes Nav, Chip, Stat Card, Table, Gantt, Modal, etc.)
+- `index.html`: importa `lumine-design-system.css` antes de `styles.css`; app shell reestruturado de sidebar vertical para navbar horizontal (`.nav` + `.nav-links` + `.nav-right`); avatar circular (`.nav-avatar`) com iniciais do usuário
+- `styles.css`: modo claro como padrão (`:root` = light, dark apenas sob `[data-theme="dark"]`); body usa `--off-white` + fonte Satoshi; `.page` substitui `.content`; tokens de cor migrados para o design system
+- `script.js`: `applyAuthVisibility()` injeta iniciais do usuário no avatar da navbar
+**Branch:** `redesign` (isolado de `main` — seguro para testes sem afetar produção)
+**Feito por:** Claude
+
+---
+
 ## Estado Atual do Sistema (2026-05-21)
 
 | Métrica                  | Valor              |
