@@ -6,6 +6,7 @@
   <meta http-equiv="Content-Language" content="pt-BR" />
   <title>Originais Lumine</title>
   <link rel="icon" type="image/png" href="assets/images/lumine-favicon.png" />
+  <link rel="stylesheet" href="lumine-design-system.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -81,36 +82,24 @@
     </div>
   </section>
 
-  <div id="appShell" class="app-shell" hidden>
-    <aside class="sidebar">
-      <a href="#" class="brand brand-link" data-go-home>
-        <div class="logo-mark" aria-hidden="true">
-          <span class="logo-l">L</span>
-          <span class="logo-point"></span>
-        </div>
-        <div>
-          <strong>ORIGINAIS</strong>
-          <small>LUMINE</small>
-        </div>
+  <div id="appShell" hidden>
+    <nav class="nav">
+      <a href="#" class="nav-logo brand-link" data-go-home>
+        <strong>ORIGINAIS</strong><em>lumine</em><span class="nav-logo-dot"></span>
       </a>
 
-      <nav class="side-nav">
-        <button class="nav-btn active" data-tab="dashboard">Dashboard</button>
-        <button class="nav-btn" data-tab="cronograma">Cronograma</button>
-        <button class="nav-btn" data-tab="projetos">Projetos</button>
-        <button class="nav-btn" data-tab="rota">Rota</button>
-        <button class="nav-btn" data-tab="usuarios">Usuários</button>
-        <button class="nav-btn" data-tab="configuracoes">Configurações</button>
-      </nav>
-    </aside>
+      <div class="nav-links">
+        <button class="nav-link nav-btn active" data-tab="dashboard">Dashboard</button>
+        <button class="nav-link nav-btn" data-tab="cronograma">Cronograma</button>
+        <button class="nav-link nav-btn" data-tab="projetos">Projetos</button>
+        <button class="nav-link nav-btn" data-tab="rota">Rota</button>
+        <button class="nav-link nav-btn" data-tab="usuarios">Usuários</button>
+        <button class="nav-link nav-btn" data-tab="configuracoes">Configurações</button>
+      </div>
 
-    <main class="content">
-      <div class="content-top-actions">
+      <div class="nav-right">
         <div id="profileMenu" class="profile-menu">
-          <button id="profileMenuBtn" class="btn light profile-menu-btn" type="button" aria-label="Perfil">
-            <svg class="profile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z"/></svg>
-            <svg class="profile-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
-          </button>
+          <button id="profileMenuBtn" class="nav-avatar" type="button" aria-label="Perfil"></button>
           <div id="profileMenuList" class="profile-menu-list" hidden>
             <div id="profileMenuUser" class="profile-menu-user"></div>
             <button type="button" id="profileViewEditBtn">Ver e Editar Perfil</button>
@@ -126,6 +115,9 @@
           </div>
         </div>
       </div>
+    </nav>
+
+    <main class="page">
 
       <section id="dashboard" class="tab active">
         <header class="view-header">

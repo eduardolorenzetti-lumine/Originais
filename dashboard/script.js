@@ -1309,6 +1309,16 @@ function applyAuthVisibility() {
   setLoginPasswordFieldType(!loginView.hidden);
   if (profileMenuList) profileMenuList.hidden = true;
   if (profileMenuUser) profileMenuUser.textContent = user ? `${user.name || "Usuário"} • ${user.role || "LEITOR"}` : "";
+  // Atualiza iniciais no avatar da navbar
+  const profileMenuBtn = document.getElementById("profileMenuBtn");
+  if (profileMenuBtn && user) {
+    const name = user.name || user.email || "U";
+    const parts = name.trim().split(/\s+/);
+    const initials = parts.length >= 2
+      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+      : name.slice(0, 2).toUpperCase();
+    profileMenuBtn.textContent = initials;
+  }
   const btnCreateUser = document.getElementById("btnCreateUser");
   if (btnCreateUser) btnCreateUser.hidden = !isAdmin;
   const usersNavBtn = document.querySelector('.nav-btn[data-tab="usuarios"]');
