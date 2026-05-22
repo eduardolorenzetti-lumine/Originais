@@ -1221,14 +1221,23 @@ label {
   font-size: 0.82rem;
 }
 
-input,
+input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"]),
 select,
 textarea {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 7px 9px;
-  background: var(--input-bg);
-  color: var(--text);
+  border: 0.5px solid var(--pale);
+  border-radius: var(--r-sm);
+  padding: 7px 10px;
+  background: var(--white);
+  color: var(--black);
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"]):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--yellow);
+  box-shadow: 0 0 0 2px rgba(245, 230, 0, 0.20);
 }
 
 #projectYear:disabled {
@@ -2476,16 +2485,33 @@ tbody tr:hover {
 
 dialog {
   width: min(980px, 96vw);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 14px;
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow);
+  border: 0.5px solid var(--pale);
+  border-radius: var(--r-lg);
+  padding: 18px;
+  background: var(--white);
+  color: var(--black);
+  box-shadow: var(--shadow-modal);
+  max-height: 92vh;
+  overflow-y: auto;
 }
 
 dialog::backdrop {
-  background: var(--modal-backdrop);
+  background: rgba(0, 0, 0, 0.40);
+}
+
+/* Dialog title */
+dialog h2 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--black);
+  margin: -18px -18px 16px;
+  padding: 14px 18px;
+  border-bottom: 0.5px solid var(--pale);
+  background: var(--white);
+  position: sticky;
+  top: -18px;
+  z-index: 1;
 }
 
 #projectForm h2 {
@@ -2587,9 +2613,11 @@ dialog::backdrop {
 
 .dialog-actions {
   display: flex;
-  justify-content: end;
+  justify-content: flex-end;
   gap: 8px;
-  margin-top: 10px;
+  padding: 12px 0 0;
+  border-top: 0.5px solid var(--pale);
+  margin-top: 16px;
 }
 
 .empty {
@@ -2641,8 +2669,8 @@ dialog::backdrop {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 0 2px;
-  font-size: 0.85rem;
-  color: var(--text-2);
+  font-size: 13px;
+  color: var(--dark);
   cursor: pointer;
 }
 
@@ -2650,11 +2678,11 @@ dialog::backdrop {
   width: 36px;
   height: 20px;
   appearance: none;
-  background: var(--muted);
+  background: var(--pale);
   border-radius: 999px;
   cursor: pointer;
   position: relative;
-  transition: background 0.2s;
+  transition: background 0.18s;
   flex-shrink: 0;
 }
 
@@ -2666,12 +2694,13 @@ dialog::backdrop {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #fff;
-  transition: transform 0.2s;
+  background: var(--white);
+  transition: transform 0.18s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
 
 .toggle-row input[type="checkbox"]:checked {
-  background: var(--accent);
+  background: var(--black);
 }
 
 .toggle-row input[type="checkbox"]:checked::after {
