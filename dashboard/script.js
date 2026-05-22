@@ -1914,7 +1914,7 @@ function renderDashboard() {
     renderColoredBarChart(document.getElementById("chartByYear"), countByYearWithMissing(projects));
     renderHorizontalBarChart(document.getElementById("chartByStatus"), countBy(projects, (p) => getProjectField(p, "status"), true), getConfigColors("statuses"));
     renderTileChart(document.getElementById("chartByCategory"), countBy(projects, categoryPicker, true), getConfigColors("categories"));
-    renderTileChart(document.getElementById("chartByFormat"), countBy(projects, formatPicker, true), getConfigColors("formats"));
+    renderColoredBarChart(document.getElementById("chartByFormat"), countBy(projects, formatPicker, true), getConfigColors("formats"));
     renderTileChart(document.getElementById("chartByNature"), countBy(projects, naturePicker, true), getConfigColors("natures"));
     renderHorizontalBarChart(document.getElementById("chartByDuration"), countBy(projects, durationPicker, true), getConfigColors("durations"));
     renderBarChart(document.getElementById("chartShortDocsSpent"), { "Short doc": shortDocSpentTotal }, "vertical", ["#64748b"], (value) => money(value));
@@ -5527,17 +5527,28 @@ function renderTileChart(container, map, palette = []) {
   }).join("");
 }
 
-// ── Barras coloridas verticais (Produções por Ano) ──
-function renderColoredBarChart(container, map) {
+// Paleta viva para gráficos coloridos
+const VIVID_BAR_PALETTE = [
+  "#f3ba00", "#3b82f6", "#10b981", "#f43f5e",
+  "#8b5cf6", "#f97316", "#06b6d4", "#ec4899",
+  "#84cc16", "#14b8a6"
+];
+
+// ── Barras coloridas verticais (Por Ano, Por Formato, etc.) ──
+function renderColoredBarChart(container, map, customPalette) {
   if (!container) return;
+  const isYearMap = Object.keys(map).some((k) => /^\d{4}$/.test(k) || k === "SEM ANO");
   const entries = Object.entries(map).sort((a, b) => {
-    if (a[0] === "SEM ANO") return 1;
-    if (b[0] === "SEM ANO") return -1;
-    return Number(a[0]) - Number(b[0]);
+    if (isYearMap) {
+      if (a[0] === "SEM ANO") return 1;
+      if (b[0] === "SEM ANO") return -1;
+      return Number(a[0]) - Number(b[0]);
+    }
+    return Number(b[1]) - Number(a[1]);
   });
   if (!entries.length) { container.innerHTML = '<div class="empty">Sem dados.</div>'; return; }
 
-  const palette = ["#f3ba00", "#111111", "#f3ba00", "#111111", "#f3ba00", "#111111", "#f3ba00", "#111111", "#f3ba00", "#111111"];
+  const palette = (customPalette && customPalette.length) ? customPalette : VIVID_BAR_PALETTE;
   const max = Math.max(...entries.map(([, v]) => Number(v)), 1);
 
   container.innerHTML = entries.map(([label, value], idx) => {
@@ -5545,8 +5556,8 @@ function renderColoredBarChart(container, map) {
     const height = Math.max(Math.round((Number(value) / max) * 110), 10);
     const delay = `${idx * 0.06}s`;
     return `<div class="cbar-col">
-      <div class="cbar-value">${value}</div>
-      <div class="cbar-bar-wrap" style="height:120px">
+      <div class="cbar-bar-wrap">
+        <span class="cbar-value-above" style="bottom:${height + 5}px">${value}</span>
         <div class="cbar-bar" style="height:${height}px;background:${color};animation-delay:${delay}"></div>
       </div>
       <div class="cbar-label">${escapeHtml(label)}</div>
@@ -5764,22 +5775,63 @@ function getCountryCoords(countryName) {
   return null;
 }
 
+// Lookup país → código ISO2 (para highlight de regiões no jsvectormap)
+const COUNTRY_ISO2 = {
+  "Brasil":"BR","Argentina":"AR","Chile":"CL","Colômbia":"CO","Peru":"PE","Uruguai":"UY",
+  "Venezuela":"VE","Equador":"EC","Bolívia":"BO","Paraguai":"PY","Guiana":"GY","Suriname":"SR",
+  "Estados Unidos":"US","Canadá":"CA","México":"MX","Cuba":"CU","Costa Rica":"CR",
+  "Guatemala":"GT","Honduras":"HN","El Salvador":"SV","Nicarágua":"NI","Panamá":"PA",
+  "Portugal":"PT","Espanha":"ES","França":"FR","Alemanha":"DE","Itália":"IT","Reino Unido":"GB",
+  "Países Baixos":"NL","Bélgica":"BE","Suíça":"CH","Áustria":"AT","Polônia":"PL","Suécia":"SE",
+  "Noruega":"NO","Dinamarca":"DK","Finlândia":"FI","Rússia":"RU","Grécia":"GR",
+  "República Tcheca":"CZ","Hungria":"HU","Romênia":"RO","Croácia":"HR","Sérvia":"RS",
+  "Bulgária":"BG","Eslováquia":"SK","Eslovênia":"SI","Ucrânia":"UA","Bielorrússia":"BY",
+  "Japão":"JP","China":"CN","Coreia do Sul":"KR","Índia":"IN","Irã":"IR","Israel":"IL",
+  "Turquia":"TR","Tailândia":"TH","Singapura":"SG","Indonésia":"ID","Vietnã":"VN",
+  "Malásia":"MY","Filipinas":"PH","Camboja":"KH","Paquistão":"PK","Bangladesh":"BD",
+  "Nigéria":"NG","Egito":"EG","Marrocos":"MA","África do Sul":"ZA","Tanzânia":"TZ",
+  "Quênia":"KE","Etiópia":"ET","Gana":"GH","Senegal":"SN","Angola":"AO","Moçambique":"MZ",
+  "Austrália":"AU","Nova Zelândia":"NZ","Palestina":"PS","Iraque":"IQ","Líbano":"LB",
+};
+
+function buildCountryPopupHtml(country, items) {
+  const byProject = {};
+  items.forEach((item) => {
+    if (!byProject[item.projectId]) byProject[item.projectId] = [];
+    byProject[item.projectId].push(item);
+  });
+  const total = items.length;
+  let html = `<div class="map-popup-country">${escapeHtml(country)} · ${total} prêmio${total !== 1 ? "s" : ""}</div>`;
+  Object.entries(byProject).forEach(([projectId, projItems]) => {
+    const proj = (state.projects || []).find((p) => p.id === projectId);
+    const title = proj ? (proj.title || "Sem título") : "Projeto desconhecido";
+    const prizes = projItems.map((i) =>
+      `<div class="map-popup-prize">${escapeHtml(i.name || "Prêmio não identificado")}</div>`
+    ).join("");
+    html += `<div class="map-popup-film">
+      <div class="map-popup-film-title">${escapeHtml(title)}</div>
+      ${prizes}
+    </div>`;
+  });
+  return html;
+}
+
 function renderWorldMap(container, premiadosItems) {
   if (!container) return;
 
-  // Destroy previous map instance to avoid Leaflet "already initialized" error
+  // Destruir instância anterior
   if (_worldMapInstance) {
-    try { _worldMapInstance.remove(); } catch (e) {}
+    try { _worldMapInstance.destroy(); } catch (e) {}
     _worldMapInstance = null;
   }
   container.innerHTML = "";
 
-  if (typeof L === "undefined") {
-    container.innerHTML = '<div class="empty" style="height:100%;display:flex;align-items:center;justify-content:center">Mapa não disponível (Leaflet não carregado)</div>';
+  if (typeof jsVectorMap === "undefined") {
+    container.innerHTML = '<div class="empty" style="height:100%;display:flex;align-items:center;justify-content:center">Mapa vetorial não disponível.</div>';
     return;
   }
 
-  // Agrupar prêmios por país
+  // Agrupar premiações por país
   const byCountry = {};
   premiadosItems.forEach((item) => {
     const c = String(item.country || "").trim();
@@ -5788,84 +5840,97 @@ function renderWorldMap(container, premiadosItems) {
     byCountry[c].push(item);
   });
 
-  const map = L.map(container, {
-    zoom: 2,
-    center: [20, 0],
-    zoomControl: true,
-    scrollWheelZoom: false,
-    attributionControl: false,
-  });
-  _worldMapInstance = map;
-
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 18,
-    subdomains: "abcd",
-  }).addTo(map);
-
-  // Função para montar popup detalhado por país
-  function buildCountryPopup(country, items) {
-    // Agrupar por projeto
-    const byProject = {};
-    items.forEach((item) => {
-      if (!byProject[item.projectId]) byProject[item.projectId] = [];
-      byProject[item.projectId].push(item);
-    });
-
-    const totalPrizes = items.length;
-    let html = `<div class="map-popup-country">${escapeHtml(country)} · ${totalPrizes} prêmio${totalPrizes !== 1 ? "s" : ""}</div>`;
-
-    Object.entries(byProject).forEach(([projectId, projItems]) => {
-      const proj = (state.projects || []).find((p) => p.id === projectId);
-      const title = proj ? (proj.title || "Sem título") : "Projeto desconhecido";
-      const prizes = projItems
-        .map((i) => `<div class="map-popup-prize">${escapeHtml(i.name || "Prêmio não identificado")}</div>`)
-        .join("");
-      html += `<div class="map-popup-film">
-        <div class="map-popup-film-title">${escapeHtml(title)}</div>
-        ${prizes}
-      </div>`;
-    });
-
-    return html;
-  }
-
-  // Ícone troféu como DivIcon
-  function trophyIcon(count) {
-    const multi = count > 1 ? " map-trophy-pin-multi" : "";
-    return L.divIcon({
-      html: `<div class="map-trophy-pin${multi}" title="${count} prêmio${count !== 1 ? "s" : ""}">🏆</div>`,
-      className: "",
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
-      popupAnchor: [0, -18],
-    });
-  }
-
-  // Adicionar pins
-  let hasMarkers = false;
+  // Markers array para jsvectormap
+  const markers = [];
+  const markerCountryMap = {}; // index → country name
   Object.entries(byCountry).forEach(([country, items]) => {
     const coords = getCountryCoords(country);
     if (!coords) return;
-    hasMarkers = true;
-    const marker = L.marker(coords, { icon: trophyIcon(items.length) }).addTo(map);
-    marker.bindPopup(buildCountryPopup(country, items), {
-      maxWidth: 260,
-      maxHeight: 300,
-    });
+    markerCountryMap[markers.length] = country;
+    markers.push({ name: country, coords });
   });
 
-  if (!hasMarkers) {
-    container.style.display = "flex";
-    container.style.alignItems = "center";
-    container.style.justifyContent = "center";
+  // ISO highlights
+  const regionValues = {};
+  Object.keys(byCountry).forEach((country) => {
+    const iso = COUNTRY_ISO2[country];
+    if (iso) regionValues[iso] = byCountry[country].length;
+  });
+
+  const mapOpts = {
+    map: "world",
+    selector: container,
+    backgroundColor: "transparent",
+    zoomButtons: false,
+    regionStyle: {
+      initial:  { fill: "#e8eaed", stroke: "#fff", strokeWidth: 0.4 },
+      hover:    { fill: "#d0d4db", cursor: "default" },
+      selected: { fill: "#f3ba00" },
+    },
+    markers,
+    markerStyle: {
+      initial: { fill: "#f3ba00", stroke: "#111111", strokeWidth: 1.5, r: 7 },
+      hover:   { fill: "#f3ba00", stroke: "#111111", r: 9, cursor: "pointer" },
+    },
+    onMarkerClick(e, idx) {
+      const country = markerCountryMap[idx];
+      if (!country) return;
+      // Fechar popup anterior
+      const old = container.querySelector(".map-custom-popup");
+      if (old) old.remove();
+      // Criar popup
+      const popup = document.createElement("div");
+      popup.className = "map-custom-popup";
+      popup.innerHTML = `
+        <button class="map-popup-close" aria-label="Fechar">×</button>
+        ${buildCountryPopupHtml(country, byCountry[country])}
+      `;
+      popup.querySelector(".map-popup-close").addEventListener("click", () => popup.remove());
+      container.appendChild(popup);
+      e.stopPropagation && e.stopPropagation();
+    },
+    onRegionTooltipShow(tooltip) {
+      // Desabilitar tooltip de regiões sem prêmios
+      const code = tooltip._region;
+      if (!Object.values(COUNTRY_ISO2).includes(code) || !regionValues[code]) {
+        tooltip.hide && tooltip.hide();
+      }
+    },
+  };
+
+  // Adicionar série de highlights apenas se houver dados
+  if (Object.keys(regionValues).length > 0) {
+    mapOpts.series = {
+      regions: [{
+        attribute: "fill",
+        scale: { min: "#fef3c7", max: "#f3ba00" },
+        values: regionValues,
+        normalizeFunction: "polynomial",
+      }],
+    };
+  }
+
+  try {
+    _worldMapInstance = new jsVectorMap(mapOpts);
+  } catch (err) {
+    container.innerHTML = `<div class="empty">Erro ao carregar mapa: ${err.message}</div>`;
+    return;
+  }
+
+  // Fechar popup ao clicar no mapa
+  container.addEventListener("click", (e) => {
+    if (!e.target.closest(".map-custom-popup") && !e.target.closest(".jvm-marker")) {
+      const popup = container.querySelector(".map-custom-popup");
+      if (popup) popup.remove();
+    }
+  });
+
+  if (!markers.length) {
     const msg = document.createElement("div");
-    msg.className = "empty";
+    msg.className = "map-empty-label";
     msg.textContent = "Nenhum prêmio com país registrado.";
     container.appendChild(msg);
   }
-
-  // Fit bounds se houver markers
-  setTimeout(() => { try { map.invalidateSize(); } catch(e) {} }, 100);
 }
 
 // ── Lista canônica de países (para datalist + validação) ──
