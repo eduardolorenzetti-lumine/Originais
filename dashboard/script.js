@@ -1911,15 +1911,15 @@ function renderDashboard() {
     const naturePicker = (project) => getNormalizedProjectField(project, "nature", { strict: true });
     const durationPicker = (project) => getNormalizedProjectField(project, "duration", { strict: true });
 
-    renderBarChart(document.getElementById("chartByYear"), countByYearWithMissing(projects), "vertical", ["#f3ba00"]);
+    renderColoredBarChart(document.getElementById("chartByYear"), countByYearWithMissing(projects));
     renderHorizontalBarChart(document.getElementById("chartByStatus"), countBy(projects, (p) => getProjectField(p, "status"), true), getConfigColors("statuses"));
     renderHorizontalBarChart(document.getElementById("chartByCategory"), countBy(projects, categoryPicker, true), getConfigColors("categories"));
     renderHorizontalBarChart(document.getElementById("chartByFormat"), countBy(projects, formatPicker, true), getConfigColors("formats"));
     renderHorizontalBarChart(document.getElementById("chartByNature"), countBy(projects, naturePicker, true), getConfigColors("natures"));
     renderHorizontalBarChart(document.getElementById("chartByDuration"), countBy(projects, durationPicker, true), getConfigColors("durations"));
     renderBarChart(document.getElementById("chartShortDocsSpent"), { "Short doc": shortDocSpentTotal }, "vertical", ["#64748b"], (value) => money(value));
-    renderAvgStageTable(document.getElementById("chartAvgStage"), avgMonthsByStage(projects));
-    renderMaioresInvestimentos(document.getElementById("maioresInvestimentos"), projects);
+    renderAvgStageDonut(document.getElementById("chartAvgStage"), avgMonthsByStage(projects));
+    renderFinanceiro(document.getElementById("financeiroContent"), projects);
   }
 
   if (showRota) {
@@ -2006,6 +2006,10 @@ function renderRouteDashboard() {
   // Top 5 Destaques (premiados + nomeados + selecionados)
   const isDestaque = (s) => isPremiado(s) || isNomeado(s) || isSelecionado(s);
   renderRouteTop5(allRouteItems, isDestaque);
+
+  // Mapa mundial de premiações
+  const premiadosItems = allRouteItems.filter((item) => isPremiado(String(item.status || "")));
+  renderWorldMap(document.getElementById("routeWorldMap"), premiadosItems);
 }
 
 function renderRouteTop5(allRouteItems, filterFn) {
@@ -5458,11 +5462,12 @@ function renderBarChart(container, map, mode = "vertical", palette = ["#f3ba00"]
 
   container.innerHTML = entries
     .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
-      .map(([label, value], idx) => {
-        const color = palette[idx % palette.length];
-        const height = Math.max((Number(value) / max) * 110, 8);
+    .map(([label, value], idx) => {
+      const color = palette[idx % palette.length];
+      const height = Math.max((Number(value) / max) * 110, 8);
       const displayValue = typeof valueFormatter === "function" ? valueFormatter(Number(value), label) : value;
-      return `<div class="bar-col"><div class="bar" style="height:${height}px; background:${color}"></div><small>${escapeHtml(label)}</small><small>${escapeHtml(String(displayValue))}</small></div>`;
+      const delay = `${idx * 0.06}s`;
+      return `<div class="bar-col"><div class="bar" style="height:${height}px;background:${color};animation-delay:${delay}"></div><small>${escapeHtml(label)}</small><small>${escapeHtml(String(displayValue))}</small></div>`;
     })
     .join("");
 }
@@ -5496,6 +5501,363 @@ function renderDonutChart(container, map) {
   container.innerHTML = `<div class="chart-donut-wrap"><div class="donut" style="background: conic-gradient(${slices})"></div><ul class="legend">${legend}</ul></div>`;
 }
 
+// ── Barras coloridas verticais (Produções por Ano) ──
+function renderColoredBarChart(container, map) {
+  if (!container) return;
+  const entries = Object.entries(map).sort((a, b) => {
+    if (a[0] === "SEM ANO") return 1;
+    if (b[0] === "SEM ANO") return -1;
+    return Number(a[0]) - Number(b[0]);
+  });
+  if (!entries.length) { container.innerHTML = '<div class="empty">Sem dados.</div>'; return; }
+
+  const palette = ["#f3ba00", "#111111", "#f3ba00", "#111111", "#f3ba00", "#111111", "#f3ba00", "#111111", "#f3ba00", "#111111"];
+  const max = Math.max(...entries.map(([, v]) => Number(v)), 1);
+
+  container.innerHTML = entries.map(([label, value], idx) => {
+    const color = palette[idx % palette.length];
+    const height = Math.max(Math.round((Number(value) / max) * 110), 10);
+    const delay = `${idx * 0.06}s`;
+    return `<div class="cbar-col">
+      <div class="cbar-value">${value}</div>
+      <div class="cbar-bar-wrap" style="height:120px">
+        <div class="cbar-bar" style="height:${height}px;background:${color};animation-delay:${delay}"></div>
+      </div>
+      <div class="cbar-label">${escapeHtml(label)}</div>
+    </div>`;
+  }).join("");
+}
+
+// ── Donut com legenda (Tempo Médio por Etapa) ──
+function renderAvgStageDonut(container, map) {
+  if (!container) return;
+  const entries = Object.entries(map);
+  if (!entries.length) {
+    container.innerHTML = '<div class="empty">Sem dados suficientes.</div>';
+    return;
+  }
+
+  const stageColors = Object.fromEntries(
+    (state.settings.stages || []).map((s) => [s.name, s.color])
+  );
+  const defaultColors = ["#f3ba00", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#06b6d4", "#fb7185", "#94a3b8"];
+
+  const total = entries.reduce((acc, [, v]) => acc + Number(v), 0);
+  const totalLabel = `${total.toFixed(1)}`;
+
+  // Donut SVG via conic-gradient emulado em SVG com strokes
+  const cx = 55, cy = 55, r = 40, stroke = 18;
+  const circumference = 2 * Math.PI * r;
+
+  let accumulated = 0;
+  const segments = entries.map(([name, val], idx) => {
+    const color = stageColors[name] || defaultColors[idx % defaultColors.length];
+    const fraction = Number(val) / total;
+    const dash = fraction * circumference;
+    const offset = circumference - accumulated * circumference;
+    accumulated += fraction;
+    return `<circle cx="${cx}" cy="${cy}" r="${r}"
+      fill="none" stroke="${color}" stroke-width="${stroke}"
+      stroke-dasharray="${dash.toFixed(3)} ${(circumference - dash).toFixed(3)}"
+      stroke-dashoffset="${offset.toFixed(3)}"
+      style="animation:donutFadeIn 0.5s ease-out ${idx * 0.07}s both"/>`;
+  }).join("");
+
+  const legend = entries.map(([name, val], idx) => {
+    const color = stageColors[name] || defaultColors[idx % defaultColors.length];
+    const delay = `${idx * 0.06 + 0.1}s`;
+    return `<div class="avg-donut-legend-item" style="animation-delay:${delay}">
+      <div class="avg-donut-dot" style="background:${color}"></div>
+      <div class="avg-donut-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+      <div class="avg-donut-val">${val} <span>m</span></div>
+    </div>`;
+  }).join("");
+
+  container.innerHTML = `
+    <div class="avg-stage-donut-wrap">
+      <div class="avg-donut-svg-wrap">
+        <svg width="110" height="110" viewBox="0 0 110 110">${segments}</svg>
+        <div class="avg-donut-center">
+          <span class="avg-donut-center-num">${entries.length}</span>
+          <span class="avg-donut-center-lbl">etapas</span>
+        </div>
+      </div>
+      <div class="avg-donut-legend">${legend}</div>
+    </div>`;
+}
+
+// ── Painel Financeiro ──
+function renderFinanceiro(container, projects) {
+  if (!container) return;
+
+  // Calcular totais do conjunto filtrado
+  const { regularSpent } = getDashboardSpentCollections(projects);
+  const totalSpent = regularSpent.reduce((a, i) => a + i.value, 0);
+  const totalProd  = regularSpent.reduce((a, i) => a + i.production, 0);
+  const totalTeam  = regularSpent.reduce((a, i) => a + i.team, 0);
+  const totalOther = Math.max(totalSpent - totalProd - totalTeam, 0);
+
+  if (totalSpent === 0) {
+    container.innerHTML = '<div class="empty">Nenhum investimento registrado.</div>';
+    return;
+  }
+
+  // Ano corrente selecionado (ou o mais recente com dados)
+  let currentYear = null;
+  if (selectedDashboardYears.size === 1) {
+    currentYear = [...selectedDashboardYears][0];
+  } else {
+    const years = regularSpent.map((i) => getProjectYear(i.p)).filter(Boolean).sort((a, b) => b - a);
+    if (years.length) currentYear = years[0];
+  }
+
+  // Totais do ano anterior para comparativo
+  let prevYearTotal = 0;
+  if (currentYear) {
+    const allProjects = state.projects || [];
+    const prevY = Number(currentYear) - 1;
+    prevYearTotal = allProjects
+      .filter((p) => Number(getProjectYear(p)) === prevY)
+      .reduce((acc, p) => acc + (getProjectSpentValue(p) || 0), 0);
+  }
+
+  const moneyK = (v) => {
+    if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(1).replace(".", ",")}M`;
+    if (v >= 1_000)     return `R$ ${Math.round(v / 1_000)}k`;
+    return money(v);
+  };
+
+  const deltaClass = (d) => d > 0 ? "up" : d < 0 ? "down" : "flat";
+  const deltaArrow = (d) => d > 0 ? "↑" : d < 0 ? "↓" : "=";
+
+  // Delta total vs ano anterior
+  const diff = prevYearTotal > 0 ? totalSpent - prevYearTotal : null;
+  const diffPct = diff !== null && prevYearTotal > 0 ? Math.round((diff / prevYearTotal) * 100) : null;
+
+  const deltaHtml = diff !== null
+    ? `<span class="fin-delta ${deltaClass(diff)}">${deltaArrow(diff)} ${moneyK(Math.abs(diff))} vs ${Number(currentYear) - 1}</span>`
+    : "";
+
+  // Percentuais para barra empilhada
+  const pctProd  = totalSpent > 0 ? Math.round((totalProd  / totalSpent) * 100) : 0;
+  const pctTeam  = totalSpent > 0 ? Math.round((totalTeam  / totalSpent) * 100) : 0;
+  const pctOther = Math.max(100 - pctProd - pctTeam, 0);
+
+  // Top 5 projetos por investimento
+  const top5 = regularSpent
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+  const maxTop = top5.length ? top5[0].value : 1;
+
+  const topHtml = top5.map(({ p, value }, idx) => {
+    const pct = Math.max((value / maxTop) * 100, 2);
+    const barColor = idx === 0 ? "#f3ba00" : idx === 1 ? "#111111" : idx === 2 ? "#3b82f6" : "#94a3b8";
+    const delay = `${idx * 0.07}s`;
+    return `<div class="fin-top-item" style="animation-delay:${delay}">
+      <div class="fin-top-info">
+        <div class="fin-top-name" title="${escapeHtml(p.title || "")}">${escapeHtml(p.title || "Sem título")}</div>
+        <div class="fin-top-bar-wrap">
+          <div class="fin-top-bar" style="width:${pct}%;background:${barColor};animation-delay:${delay}"></div>
+        </div>
+      </div>
+      <div class="fin-top-value">${moneyK(value)}</div>
+    </div>`;
+  }).join("");
+
+  container.innerHTML = `
+    <div class="financeiro-wrap">
+      <div class="financeiro-left">
+        <div>
+          <div class="fin-total-row">
+            <span class="fin-total-value">${moneyK(totalSpent)}</span>
+            ${currentYear ? `<span class="fin-total-year">${currentYear}</span>` : ""}
+            ${deltaHtml}
+          </div>
+        </div>
+        <div class="fin-breakdown">
+          <div class="fin-bd-item">
+            <div class="fin-bd-label">Produção</div>
+            <div class="fin-bd-value">${moneyK(totalProd)}</div>
+            ${diffPct !== null ? `<div class="fin-bd-delta ${deltaClass(diff)}">${deltaArrow(diff)} ${Math.abs(diffPct)}%</div>` : ""}
+          </div>
+          <div class="fin-bd-item">
+            <div class="fin-bd-label">Equipe</div>
+            <div class="fin-bd-value">${moneyK(totalTeam)}</div>
+          </div>
+          <div class="fin-bd-item">
+            <div class="fin-bd-label">Outros</div>
+            <div class="fin-bd-value">${moneyK(totalOther)}</div>
+          </div>
+        </div>
+        <div class="fin-stack-bar-wrap">
+          <div class="fin-stack-labels">
+            <div class="fin-stack-label"><div class="fin-stack-dot" style="background:#111111"></div>Produção ${pctProd}%</div>
+            <div class="fin-stack-label"><div class="fin-stack-dot" style="background:#f3ba00"></div>Equipe ${pctTeam}%</div>
+            <div class="fin-stack-label"><div class="fin-stack-dot" style="background:#d1d5db"></div>Outros ${pctOther}%</div>
+          </div>
+          <div class="fin-stack-bar">
+            ${pctProd  > 0 ? `<div class="fin-stack-seg" style="width:${pctProd}%;background:#111111"></div>` : ""}
+            ${pctTeam  > 0 ? `<div class="fin-stack-seg" style="width:${pctTeam}%;background:#f3ba00;animation-delay:0.06s"></div>` : ""}
+            ${pctOther > 0 ? `<div class="fin-stack-seg" style="width:${pctOther}%;background:#d1d5db;animation-delay:0.12s"></div>` : ""}
+          </div>
+        </div>
+      </div>
+      <div class="financeiro-right">
+        <div class="fin-top-title">Top Projetos</div>
+        <div class="fin-top-list">${topHtml}</div>
+      </div>
+    </div>`;
+}
+
+// ── Mapa mundial de premiações (Leaflet) ──
+let _worldMapInstance = null;
+
+const COUNTRY_COORDS = {
+  // América do Sul
+  "brasil": [- 15.77, -47.92], "brazil": [-15.77, -47.92],
+  "argentina": [-34.61, -58.38], "chile": [-33.45, -70.67],
+  "colômbia": [4.71, -74.07], "colombia": [4.71, -74.07],
+  "peru": [-12.05, -77.04], "uruguai": [-34.90, -56.19], "uruguy": [-34.90, -56.19],
+  "venezuela": [10.49, -66.88], "equador": [-0.22, -78.52], "bolívia": [-16.5, -68.15],
+  "paraguai": [-25.28, -57.64],
+  // América do Norte e Central
+  "estados unidos": [38.89, -77.03], "eua": [38.89, -77.03], "usa": [38.89, -77.03],
+  "canadá": [45.42, -75.69], "canada": [45.42, -75.69],
+  "méxico": [19.43, -99.13], "mexico": [19.43, -99.13],
+  "cuba": [23.13, -82.38],
+  // Europa
+  "portugal": [38.72, -9.14], "espanha": [40.42, -3.70], "spain": [40.42, -3.70],
+  "france": [48.85, 2.35], "franca": [48.85, 2.35], "frança": [48.85, 2.35],
+  "alemanha": [52.52, 13.41], "germany": [52.52, 13.41],
+  "itália": [41.90, 12.48], "italy": [41.90, 12.48], "italia": [41.90, 12.48],
+  "reino unido": [51.51, -0.13], "uk": [51.51, -0.13], "england": [51.51, -0.13],
+  "holanda": [52.37, 4.89], "netherlands": [52.37, 4.89], "países baixos": [52.37, 4.89],
+  "bélgica": [50.85, 4.35], "belgica": [50.85, 4.35], "belgium": [50.85, 4.35],
+  "suíça": [46.95, 7.44], "suica": [46.95, 7.44], "switzerland": [46.95, 7.44],
+  "áustria": [48.21, 16.37], "austria": [48.21, 16.37],
+  "polônia": [52.23, 21.01], "polonia": [52.23, 21.01], "poland": [52.23, 21.01],
+  "suécia": [59.33, 18.07], "suecia": [59.33, 18.07], "sweden": [59.33, 18.07],
+  "noruega": [59.91, 10.75], "norway": [59.91, 10.75],
+  "dinamarca": [55.68, 12.57], "denmark": [55.68, 12.57],
+  "finlândia": [60.17, 24.94], "finlandia": [60.17, 24.94], "finland": [60.17, 24.94],
+  "russia": [55.75, 37.62], "rússia": [55.75, 37.62],
+  "grécia": [37.98, 23.73], "grecia": [37.98, 23.73], "greece": [37.98, 23.73],
+  "república tcheca": [50.08, 14.47], "czech republic": [50.08, 14.47],
+  "hungria": [47.50, 19.04], "hungary": [47.50, 19.04],
+  "romênia": [44.44, 26.10], "romania": [44.44, 26.10],
+  // Ásia
+  "japão": [35.68, 139.69], "japao": [35.68, 139.69], "japan": [35.68, 139.69],
+  "china": [39.91, 116.39], "coreia do sul": [37.57, 126.98], "south korea": [37.57, 126.98],
+  "índia": [28.61, 77.21], "india": [28.61, 77.21],
+  "irã": [35.69, 51.39], "iran": [35.69, 51.39],
+  "israel": [31.77, 35.22],
+  "turquia": [39.92, 32.85], "turkey": [39.92, 32.85],
+  "tailândia": [13.75, 100.52], "thailand": [13.75, 100.52],
+  "cingapura": [1.35, 103.82], "singapore": [1.35, 103.82],
+  // África
+  "nigéria": [9.05, 7.49], "nigeria": [9.05, 7.49],
+  "egito": [30.05, 31.24], "egypt": [30.05, 31.24],
+  "marrocos": [33.99, -6.85], "morocco": [33.99, -6.85],
+  "africa do sul": [-25.74, 28.19], "south africa": [-25.74, 28.19],
+  // Oceania
+  "austrália": [-35.28, 149.13], "australia": [-35.28, 149.13],
+  "nova zelândia": [-41.29, 174.78], "new zealand": [-41.29, 174.78],
+};
+
+function getCountryCoords(countryName) {
+  const key = (countryName || "").toLowerCase().trim()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "");
+  // Exact match first
+  if (COUNTRY_COORDS[key]) return COUNTRY_COORDS[key];
+  // Partial match
+  for (const [k, coords] of Object.entries(COUNTRY_COORDS)) {
+    if (key.includes(k) || k.includes(key)) return coords;
+  }
+  return null;
+}
+
+function renderWorldMap(container, premiadosItems) {
+  if (!container) return;
+
+  // Destroy previous map instance to avoid Leaflet "already initialized" error
+  if (_worldMapInstance) {
+    try { _worldMapInstance.remove(); } catch (e) {}
+    _worldMapInstance = null;
+  }
+  container.innerHTML = "";
+
+  if (typeof L === "undefined") {
+    container.innerHTML = '<div class="empty" style="height:100%;display:flex;align-items:center;justify-content:center">Mapa não disponível (Leaflet não carregado)</div>';
+    return;
+  }
+
+  // Agrupar prêmios por país
+  const byCountry = {};
+  premiadosItems.forEach((item) => {
+    const c = String(item.country || "").trim();
+    if (!c) return;
+    byCountry[c] = (byCountry[c] || []);
+    byCountry[c].push(item);
+  });
+
+  const map = L.map(container, {
+    zoom: 2,
+    center: [20, 0],
+    zoomControl: true,
+    scrollWheelZoom: false,
+    attributionControl: false,
+  });
+  _worldMapInstance = map;
+
+  // Tile layer CartoDB light (sem API key)
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    maxZoom: 18,
+    subdomains: "abcd",
+  }).addTo(map);
+
+  // Adicionar pins
+  let hasMarkers = false;
+  Object.entries(byCountry).forEach(([country, items]) => {
+    const coords = getCountryCoords(country);
+    if (!coords) return;
+    hasMarkers = true;
+    const count = items.length;
+    const radius = Math.min(6 + count * 3, 22);
+    const marker = L.circleMarker(coords, {
+      radius,
+      fillColor: "#f3ba00",
+      color: "#111111",
+      weight: 1.5,
+      opacity: 1,
+      fillOpacity: 0.85,
+    }).addTo(map);
+
+    const projectNames = [...new Set(items.map((i) => {
+      const proj = (state.projects || []).find((p) => p.id === i.projectId);
+      return proj ? (proj.title || "Sem título") : null;
+    }).filter(Boolean))].slice(0, 5).join("<br>");
+
+    marker.bindPopup(`
+      <div class="map-pin-popup-title">${escapeHtml(country)}</div>
+      <div class="map-pin-popup-count">${count} prêmio${count !== 1 ? "s" : ""}</div>
+      ${projectNames ? `<div style="margin-top:4px;font-size:0.72rem;color:var(--muted)">${projectNames}</div>` : ""}
+    `);
+  });
+
+  if (!hasMarkers) {
+    container.style.display = "flex";
+    container.style.alignItems = "center";
+    container.style.justifyContent = "center";
+    const msg = document.createElement("div");
+    msg.className = "empty";
+    msg.textContent = "Nenhum prêmio com país registrado.";
+    container.appendChild(msg);
+  }
+
+  // Fit bounds se houver markers
+  setTimeout(() => { try { map.invalidateSize(); } catch(e) {} }, 100);
+}
+
 // Horizontal bar chart com labels e valores compactos (para status/categoria/etc.)
 function renderHorizontalBarChart(container, map, palette = []) {
   if (!container) return;
@@ -5510,9 +5872,10 @@ function renderHorizontalBarChart(container, map, palette = []) {
     .map(([label, value], idx) => {
       const color = (palette && palette[idx]) || defaultColors[idx % defaultColors.length];
       const pct = Math.max((Number(value) / max) * 100, 4);
+      const delay = `${idx * 0.05}s`;
       return `<div class="hbar-row">
         <div class="hbar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
-        <div class="hbar-track"><div class="hbar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:${pct}%;background:${color};animation-delay:${delay}"></div></div>
         <div class="hbar-value">${value}</div>
       </div>`;
     })

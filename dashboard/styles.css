@@ -1059,8 +1059,23 @@ textarea {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
+}
+
+/* Painel padrão ocupa 2/6 → 3 por linha */
+.panel {
+  grid-column: span 2;
+}
+
+/* Painel metade → 2 por linha */
+.panel.half {
+  grid-column: span 3;
+}
+
+/* Painel largo → linha inteira */
+.panel.wide {
+  grid-column: 1 / -1;
 }
 
 .panel {
@@ -1077,10 +1092,6 @@ textarea {
   font-size: 13px;
   font-weight: 600;
   color: var(--dark);
-}
-
-.panel.wide {
-  grid-column: 1 / -1;
 }
 
 /* Panels that use card-header + card-body: reset old padding */
@@ -3082,6 +3093,11 @@ textarea:focus,
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
+  .dashboard-grid .panel,
+  .dashboard-grid .panel.half,
+  .dashboard-grid .panel.wide {
+    grid-column: 1 / -1;
+  }
   .form-grid {
     grid-template-columns: 1fr;
   }
@@ -3118,3 +3134,440 @@ textarea:focus,
     font-size: 0.92rem;
   }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ANIMAÇÕES DOS GRÁFICOS
+   ═══════════════════════════════════════════════════════════════════ */
+
+@keyframes barScaleY {
+  from { transform: scaleY(0); opacity: 0; }
+  to   { transform: scaleY(1); opacity: 1; }
+}
+
+@keyframes barScaleX {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes donutFadeIn {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Barras verticais — escala de baixo para cima */
+.bar-col .bar {
+  transform-origin: bottom;
+  animation: barScaleY 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Barras horizontais — escala da esquerda para direita */
+.hbar-fill {
+  transform-origin: left;
+  animation: barScaleX 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.avg-stage-bar {
+  transform-origin: left;
+  animation: barScaleX 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Donut geral */
+.donut {
+  animation: donutFadeIn 0.45s ease-out both;
+}
+
+/* card-header label de meta (ex: "total por projeto") */
+.card-meta-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: auto;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   GRÁFICO: BARRAS COLORIDAS (Produções por Ano)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.chart-bars-colored-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  min-height: 140px;
+  padding: 20px 0 4px;
+}
+
+.cbar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 36px;
+}
+
+.cbar-value {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+.cbar-bar-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.cbar-bar {
+  width: 80%;
+  border-radius: 5px 5px 0 0;
+  min-height: 6px;
+  transform-origin: bottom;
+  animation: barScaleY 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.cbar-label {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   GRÁFICO: DONUT COM LEGENDA (Tempo Médio por Etapa)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.avg-stage-donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 0;
+}
+
+.avg-donut-svg-wrap {
+  flex-shrink: 0;
+  position: relative;
+  width: 110px;
+  height: 110px;
+  animation: donutFadeIn 0.5s ease-out both;
+}
+
+.avg-donut-svg-wrap svg {
+  transform: rotate(-90deg);
+}
+
+.avg-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.avg-donut-center-num {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+
+.avg-donut-center-lbl {
+  font-size: 0.6rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+.avg-donut-legend {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.avg-donut-legend-item {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  animation: fadeSlideUp 0.4s ease-out both;
+}
+
+.avg-donut-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.avg-donut-name {
+  font-size: 0.76rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.avg-donut-val {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.avg-donut-val span {
+  font-size: 0.65rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   PAINEL FINANCEIRO
+   ═══════════════════════════════════════════════════════════════════ */
+
+.financeiro-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.financeiro-left {
+  padding: 4px 24px 4px 0;
+  border-right: 0.5px solid var(--pale);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.financeiro-right {
+  padding: 4px 0 4px 24px;
+}
+
+/* Cabeçalho: total + ano + comparativo */
+.fin-total-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.fin-total-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+  animation: fadeSlideUp 0.4s ease-out both;
+}
+
+.fin-total-year {
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.fin-delta {
+  font-size: 0.82rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fin-delta.up   { color: #10b981; }
+.fin-delta.down { color: #f43f5e; }
+.fin-delta.flat { color: var(--muted); }
+
+/* Breakdowns (PRODUÇÃO / EQUIPE / OUTROS) */
+.fin-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.fin-bd-item {}
+
+.fin-bd-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.fin-bd-value {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.fin-bd-delta {
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-top: 1px;
+}
+.fin-bd-delta.up   { color: #10b981; }
+.fin-bd-delta.down { color: #f43f5e; }
+.fin-bd-delta.flat { color: var(--muted); }
+
+/* Barra empilhada */
+.fin-stack-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fin-stack-labels {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.fin-stack-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.fin-stack-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.fin-stack-bar {
+  height: 10px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-2);
+  display: flex;
+}
+
+.fin-stack-seg {
+  height: 100%;
+  transform-origin: left;
+  animation: barScaleX 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Top projetos */
+.fin-top-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.fin-top-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fin-top-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  animation: fadeSlideUp 0.4s ease-out both;
+}
+
+.fin-top-info { min-width: 0; }
+
+.fin-top-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 3px;
+}
+
+.fin-top-bar-wrap {
+  height: 7px;
+  background: var(--surface-2);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.fin-top-bar {
+  height: 100%;
+  border-radius: 5px;
+  transform-origin: left;
+  animation: barScaleX 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.fin-top-value {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   MAPA MUNDIAL DE PREMIAÇÕES (Leaflet)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.route-map-body {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.route-world-map {
+  width: 100%;
+  height: 320px;
+  background: var(--surface);
+}
+
+/* Override Leaflet popup para usar design system */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px !important;
+  box-shadow: var(--shadow) !important;
+  font-family: inherit !important;
+  font-size: 0.78rem !important;
+  background: var(--white) !important;
+  border: 0.5px solid var(--pale) !important;
+}
+
+.leaflet-popup-tip {
+  background: var(--white) !important;
+}
+
+.leaflet-popup-content {
+  margin: 8px 12px !important;
+  line-height: 1.5 !important;
+}
+
+.map-pin-popup-title {
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.map-pin-popup-count {
+  color: var(--muted);
+  font-size: 0.73rem;
+}
+

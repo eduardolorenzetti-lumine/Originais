@@ -8,6 +8,7 @@
   <link rel="icon" type="image/png" href="assets/images/lumine-favicon.png" />
   <link rel="stylesheet" href="lumine-design-system.css" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
 
@@ -170,16 +171,18 @@
           <div id="summaryCards" class="summary-cards summary-grid cols-5"></div>
 
           <div class="dashboard-grid">
-            <article class="card panel wide">
-              <div class="card-header"><span class="card-title">Produções por Ano</span></div>
-              <div class="card-body"><div id="chartByYear" class="chart-bars"></div></div>
-            </article>
-
-            <article class="card panel wide">
+            <!-- Linha 1: Tempo Médio (donut) + Produções por Ano (barras coloridas) -->
+            <article class="card panel half">
               <div class="card-header"><span class="card-title">Tempo Médio por Etapa</span></div>
-              <div class="card-body"><div id="chartAvgStage" class="avg-stage-table-wrap"></div></div>
+              <div class="card-body"><div id="chartAvgStage" class="avg-stage-donut-wrap"></div></div>
             </article>
 
+            <article class="card panel half">
+              <div class="card-header"><span class="card-title">Produções por Ano</span></div>
+              <div class="card-body"><div id="chartByYear" class="chart-bars-colored-wrap"></div></div>
+            </article>
+
+            <!-- Linha 2: Status, Categoria, Formato (3 por linha) -->
             <article class="card panel">
               <div class="card-header"><span class="card-title">Por Status</span></div>
               <div class="card-body"><div id="chartByStatus" class="chart-bars horizontal"></div></div>
@@ -195,6 +198,7 @@
               <div class="card-body"><div id="chartByFormat" class="chart-bars horizontal"></div></div>
             </article>
 
+            <!-- Linha 3: Natureza, Duração, Short docs (3 por linha) -->
             <article class="card panel">
               <div class="card-header"><span class="card-title">Por Natureza</span></div>
               <div class="card-body"><div id="chartByNature" class="chart-bars horizontal"></div></div>
@@ -205,16 +209,18 @@
               <div class="card-body"><div id="chartByDuration" class="chart-bars horizontal"></div></div>
             </article>
 
-            <article class="card panel wide">
-              <div class="card-header">
-                <span class="card-title">Maiores Investimentos</span>
-              </div>
-              <div class="card-body"><div id="maioresInvestimentos" class="maiores-investimentos-wrap"></div></div>
-            </article>
-
             <article class="card panel">
               <div class="card-header"><span class="card-title">Gasto com Short docs</span></div>
               <div class="card-body"><div id="chartShortDocsSpent" class="chart-bars"></div></div>
+            </article>
+
+            <!-- Linha 4: FINANCEIRO (largura total) -->
+            <article class="card panel wide" id="financeiroPanel">
+              <div class="card-header">
+                <span class="card-title">Financeiro</span>
+                <span class="card-meta-label">total por projeto</span>
+              </div>
+              <div class="card-body"><div id="financeiroContent" class="financeiro-wrap"></div></div>
             </article>
           </div>
         </div>
@@ -229,14 +235,21 @@
               <div class="card-body"><div id="routeHighlights" class="route-highlights"></div></div>
             </article>
 
-            <article class="card panel">
-              <div class="card-header"><span class="card-title">Inscrições por Status</span></div>
-              <div class="card-body"><div id="chartRouteByStatus" class="chart-bars"></div></div>
+            <!-- Mapa mundial com pins de prêmios -->
+            <article class="card panel half">
+              <div class="card-header"><span class="card-title">Mapa de Premiações</span></div>
+              <div class="card-body route-map-body"><div id="routeWorldMap" class="route-world-map"></div></div>
             </article>
 
-            <article class="card panel">
-              <div class="card-header"><span class="card-title">Top 5 Destaques</span></div>
-              <div class="card-body"><div id="routeTop5" class="route-top5"></div></div>
+            <article class="card panel half" style="display:flex;flex-direction:column;gap:0">
+              <article class="card panel" style="border:none;box-shadow:none;border-radius:0;border-bottom:0.5px solid var(--pale)">
+                <div class="card-header"><span class="card-title">Inscrições por Status</span></div>
+                <div class="card-body"><div id="chartRouteByStatus" class="chart-bars"></div></div>
+              </article>
+              <article class="card panel" style="border:none;box-shadow:none;border-radius:0;flex:1">
+                <div class="card-header"><span class="card-title">Top 5 Destaques</span></div>
+                <div class="card-body"><div id="routeTop5" class="route-top5"></div></div>
+              </article>
             </article>
           </div>
         </div>
@@ -828,6 +841,7 @@
     <div id="routeInfoBody" class="route-info-body"></div>
   </dialog>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="seed-data.js"></script>
