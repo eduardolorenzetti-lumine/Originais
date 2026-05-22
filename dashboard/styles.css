@@ -1148,41 +1148,6 @@ textarea {
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent-2) 65%, var(--surface)), color-mix(in srgb, var(--accent) 60%, var(--surface)));
 }
 
-/* ── Dashboard View Tabs ── */
-.dashboard-view-tabs {
-  display: flex;
-  gap: 2px;
-  margin-bottom: 12px;
-  border-bottom: 2px solid var(--line);
-  padding-bottom: 0;
-}
-
-.dash-view-tab {
-  background: none;
-  border: none;
-  padding: 8px 18px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  border-radius: 6px 6px 0 0;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
-  text-transform: uppercase;
-}
-
-.dash-view-tab:hover {
-  color: var(--text);
-  background: var(--surface-hover);
-}
-
-.dash-view-tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-
 /* ── Horizontal Bar Chart (hbar) ── */
 .hbar-row {
   display: grid !important;

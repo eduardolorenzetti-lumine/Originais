@@ -1936,9 +1936,9 @@ function renderDashboardViewTabs() {
     { value: "rota", label: "Rota" }
   ];
   container.innerHTML = options
-    .map((o) => `<button class="dash-view-tab ${selectedDashboardView === o.value ? "active" : ""}" data-view="${o.value}">${o.label}</button>`)
+    .map((o) => `<button class="view-toggle-btn ${selectedDashboardView === o.value ? "active" : ""}" data-view="${o.value}">${o.label}</button>`)
     .join("");
-  container.querySelectorAll(".dash-view-tab").forEach((btn) => {
+  container.querySelectorAll(".view-toggle-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       selectedDashboardView = btn.dataset.view;
       renderDashboard();
