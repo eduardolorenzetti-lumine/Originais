@@ -218,6 +218,14 @@ CREATE INDEX projects_code_idx ON projects(code);
 
 ---
 
+### [2026-05-21] ~22h36 — BUG_FIX
+**O que foi feito:** Ajustado o visual da tela de login com redução da altura do logo para `16px` e atualização do texto do botão principal para `ENTRAR` em caixa alta.
+**Motivo / Contexto:** Refino visual solicitado pelo usuário para a tela inicial de autenticação.
+**Impacto:** Tela de login fica mais alinhada ao padrão visual esperado sem alterar a lógica de autenticação.
+**Feito por:** Codex
+
+---
+
 ### [2026-05-21] ~17h30 — REFACTOR
 **O que foi feito:** Migração visual para o novo design system Lumine (branch `redesign`) — Fases 1–3.
 **Mudanças:**
@@ -254,7 +262,27 @@ CREATE INDEX projects_code_idx ON projects(code);
 
 ---
 
-## Estado Atual do Sistema (2026-05-21)
+### [2026-05-22] ~00h30 — FEATURE + REFACTOR
+**O que foi feito:** Reformulação completa do Dashboard — tabs de visualização, novos gráficos e seção financeira.
+
+**Tabs de visualização:**
+- Chips "Ambos/Produções/Rota" substituídos por botões tab estilizados (underline amarelo no ativo)
+- Rótulos: **TODOS | PRODUÇÕES | ROTA** (era "Ambos")
+- Filtros de ano/painel ocultados automaticamente na aba Rota
+
+**Gráficos reformulados:**
+- **Tempo Médio por Etapa**: substituiu gráfico de barras horizontais por tabela visual com dot colorido por etapa, barra proporcional e valor em meses
+- **Por Status / Categoria / Formato / Natureza / Duração**: migrados de barras verticais para barras horizontais com cores dinâmicas dos settings. Labels exibem texto completo (180px)
+
+**Nova seção:**
+- **Maiores Investimentos**: lista top 10 projetos por valor total investido, com numeração destacada (ouro/prata/bronze), barra proporcional, divisão Produção × Equipe quando disponível, e valor à direita
+
+**Commits:** `f7e0038`, `6de77cc` (branch `dudu-claude/brave-mclean-c76de8`)
+**Feito por:** Claude
+
+---
+
+## Estado Atual do Sistema (2026-05-22)
 
 | Métrica                  | Valor              |
 |--------------------------|--------------------|
