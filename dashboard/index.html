@@ -29,18 +29,11 @@
   <section id="recoveryView" class="login-view" hidden>
     <div class="login-card">
       <div class="login-brand">
-        <div class="logo-mark" aria-hidden="true">
-          <span class="logo-l">L</span>
-          <span class="logo-point"></span>
-        </div>
-        <div>
-          <strong>ORIGINAIS</strong>
-          <small>LUMINE</small>
-        </div>
+        <img src="assets/images/luminstudios-logoblack.png" alt="Lumine Studios" class="login-logo-img" />
       </div>
       <form id="recoveryForm" class="login-form" autocomplete="off">
-        <h3 style="margin:0 0 4px;font-size:1rem;">Redefinir senha</h3>
-        <p style="margin:0 0 16px;font-size:0.85rem;color:var(--text-2)">Crie uma nova senha para sua conta.</p>
+        <h3 class="login-form-title">Redefinir senha</h3>
+        <p class="login-form-subtitle">Crie uma nova senha para sua conta.</p>
         <label>Nova senha
           <input id="recoveryPassword" type="text" required minlength="6" autocomplete="off" placeholder="Mínimo 6 caracteres" />
         </label>
@@ -48,7 +41,10 @@
           <input id="recoveryPasswordConfirm" type="text" required minlength="6" autocomplete="off" />
         </label>
         <p id="recoveryError" class="login-error" hidden></p>
-        <button type="submit" class="btn accent">Salvar nova senha</button>
+        <button type="submit" class="btn accent login-submit-btn">
+          <span class="btn-label">Salvar nova senha</span>
+          <span class="btn-spinner" aria-hidden="true"></span>
+        </button>
       </form>
     </div>
   </section>
@@ -56,14 +52,7 @@
   <section id="loginView" class="login-view" hidden>
     <div class="login-card">
       <a href="#" class="login-brand brand-link" data-go-home>
-        <div class="logo-mark" aria-hidden="true">
-          <span class="logo-l">L</span>
-          <span class="logo-point"></span>
-        </div>
-        <div>
-          <strong>ORIGINAIS</strong>
-          <small>LUMINE</small>
-        </div>
+        <img src="assets/images/luminstudios-logoblack.png" alt="Lumine Studios" class="login-logo-img" />
       </a>
       <form id="loginForm" class="login-form" autocomplete="off">
         <label>E-mail
@@ -74,7 +63,10 @@
         </label>
         <p id="loginStatus" class="login-status" hidden></p>
         <p id="loginError" class="login-error" hidden></p>
-        <button type="submit" class="btn accent">Entrar</button>
+        <button type="submit" class="btn accent login-submit-btn">
+          <span class="btn-label">Entrar</span>
+          <span class="btn-spinner" aria-hidden="true"></span>
+        </button>
         <div class="login-help-actions">
           <button id="forgotPasswordBtn" type="button" class="login-help-btn">Esqueci minha senha!</button>
         </div>

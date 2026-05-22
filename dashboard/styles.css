@@ -176,7 +176,28 @@ body {
   justify-items: center;
   text-align: center;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 20px;
+}
+
+.login-logo-img {
+  height: 28px;
+  width: auto;
+  display: block;
+}
+
+.login-form-title {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--black);
+}
+
+.login-form-subtitle {
+  margin: 0 0 16px;
+  font-size: 0.85rem;
+  color: var(--mid);
+  text-align: center;
 }
 
 .brand-link {
@@ -212,6 +233,35 @@ body {
 .login-form.is-processing label,
 .login-form.is-processing .login-help-actions {
   opacity: 0.5;
+}
+
+/* Botão com spinner de loading */
+.login-submit-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+}
+
+.btn-spinner {
+  display: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0, 0, 0, 0.20);
+  border-top-color: var(--black);
+  border-radius: 50%;
+  animation: auth-spin 0.65s linear infinite;
+  flex-shrink: 0;
+}
+
+.login-form.is-processing .login-submit-btn .btn-spinner {
+  display: block;
+}
+
+.login-form.is-processing .login-submit-btn .btn-label {
+  opacity: 0.7;
 }
 
 .login-status {

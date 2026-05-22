@@ -751,12 +751,11 @@ function bindAuthActions() {
         return;
       }
 
-      const submitBtn = recoveryForm.querySelector("button[type='submit']");
-      if (submitBtn) submitBtn.disabled = true;
+      recoveryForm.classList.add("is-processing");
 
       const { error } = await getSupabaseClient().auth.updateUser({ password: pwd });
 
-      if (submitBtn) submitBtn.disabled = false;
+      recoveryForm.classList.remove("is-processing");
 
       if (error) {
         const msg = String(error.message || "").toLowerCase();
