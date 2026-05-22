@@ -3574,13 +3574,10 @@ textarea:focus,
 .jvm-container {
   background: transparent !important;
   font-family: inherit !important;
-  width: 100% !important;
-  height: 100% !important;
-  position: absolute !important;
-  inset: 0 !important;
 }
 
-.route-world-map .jvm-container svg {
+/* Force SVG inside the map container to fill width & height */
+.route-world-map svg {
   width: 100% !important;
   height: 100% !important;
   display: block !important;
