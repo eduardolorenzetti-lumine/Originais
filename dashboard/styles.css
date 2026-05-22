@@ -1162,6 +1162,7 @@ textarea {
   background: none;
   border: none;
   gap: 0;
+  margin-left: 24px;
 }
 
 #dashboardViewTabs .view-toggle-btn {
@@ -1171,11 +1172,11 @@ textarea {
 }
 
 #dashboardViewTabs .view-toggle-btn:first-child {
-  border-radius: var(--radius) 0 0 var(--radius);
+  border-radius: 6px 0 0 6px;
 }
 
 #dashboardViewTabs .view-toggle-btn:last-child {
-  border-radius: 0 var(--radius) var(--radius) 0;
+  border-radius: 0 6px 6px 0;
   border-right-width: 1px;
 }
 
