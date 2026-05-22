@@ -1148,6 +1148,45 @@ textarea {
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent-2) 65%, var(--surface)), color-mix(in srgb, var(--accent) 60%, var(--surface)));
 }
 
+/* ── Dashboard: título + toggle na mesma linha ── */
+.page-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── View toggle: acabamento correto ── */
+#dashboardViewTabs.view-toggle {
+  overflow: visible;
+  background: none;
+  border: none;
+  gap: 0;
+}
+
+#dashboardViewTabs .view-toggle-btn {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-right-width: 0;
+}
+
+#dashboardViewTabs .view-toggle-btn:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+#dashboardViewTabs .view-toggle-btn:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+  border-right-width: 1px;
+}
+
+#dashboardViewTabs .view-toggle-btn.active {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+  position: relative;
+  z-index: 1;
+}
+
 /* ── Horizontal Bar Chart (hbar) ── */
 .hbar-row {
   display: grid !important;
