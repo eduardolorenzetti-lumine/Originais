@@ -1309,6 +1309,16 @@ function applyAuthVisibility() {
   setLoginPasswordFieldType(!loginView.hidden);
   if (profileMenuList) profileMenuList.hidden = true;
   if (profileMenuUser) profileMenuUser.textContent = user ? `${user.name || "Usuário"} • ${user.role || "LEITOR"}` : "";
+  // Atualiza iniciais no avatar da navbar
+  const profileMenuBtn = document.getElementById("profileMenuBtn");
+  if (profileMenuBtn && user) {
+    const name = user.name || user.email || "U";
+    const parts = name.trim().split(/\s+/);
+    const initials = parts.length >= 2
+      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+      : name.slice(0, 2).toUpperCase();
+    profileMenuBtn.textContent = initials;
+  }
   const btnCreateUser = document.getElementById("btnCreateUser");
   if (btnCreateUser) btnCreateUser.hidden = !isAdmin;
   const usersNavBtn = document.querySelector('.nav-btn[data-tab="usuarios"]');
@@ -2725,7 +2735,8 @@ function routeInlineSelect(field, itemId, currentValue, options) {
   const colorKey = field === "status" ? "routeStatuses" : field === "exclusivity" ? "routeExclusivities" : "";
   const hexColor = colorKey ? getConfigItemColor(colorKey, currentValue, 0, true) : "";
   const inlineStyle = hexColor ? ` style="background:${hexToRgba(hexColor, 0.16)};border-color:${hexToRgba(hexColor, 0.45)};color:${hexColor}"` : "";
-  return `<select class="cell-inline-select" data-route-inline="select" data-field="${field}" data-id="${itemId}"${inlineStyle}>
+  const cls = `isel${!currentValue || !hexColor ? " isel-nil" : ""}`;
+  return `<select class="${cls}" data-route-inline="select" data-field="${field}" data-id="${itemId}"${inlineStyle}>
     ${["", ...options.filter(Boolean)]
       .map((value) => {
         const label = field === "status" ? formatRouteStatusLabel(value) : value || "—";
@@ -3757,12 +3768,14 @@ function renderProjectsTable() {
         <td>
           ${
             editable
-              ? `<button class="btn light icon-btn" data-action="edit" data-id="${p.id}" title="Editar projeto" aria-label="Editar projeto">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l9.06-9.06.92.92L5.92 19.58zM20.71 7.04a1 1 0 0 0 0-1.41L18.37 3.3a1 1 0 0 0-1.41 0l-1.54 1.54 3.75 3.75 1.54-1.55z"/></svg>
-          </button>
-          <button class="btn danger icon-btn" data-action="del" data-id="${p.id}" title="Excluir projeto" aria-label="Excluir projeto">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h5v2H3V5h5l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9zm-1 12h12a2 2 0 0 0 2-2V8H4v11a2 2 0 0 0 2 2z"/></svg>
-          </button>`
+              ? `<div class="act-group">
+            <button class="act-btn" data-action="edit" data-id="${p.id}" title="Editar projeto" aria-label="Editar projeto">
+              <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14" fill="currentColor"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l9.06-9.06.92.92L5.92 19.58zM20.71 7.04a1 1 0 0 0 0-1.41L18.37 3.3a1 1 0 0 0-1.41 0l-1.54 1.54 3.75 3.75 1.54-1.55z"/></svg>
+            </button>
+            <button class="act-btn danger" data-action="del" data-id="${p.id}" title="Excluir projeto" aria-label="Excluir projeto">
+              <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14" fill="currentColor"><path d="M9 3h6l1 2h5v2H3V5h5l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9zm-1 12h12a2 2 0 0 0 2-2V8H4v11a2 2 0 0 0 2 2z"/></svg>
+            </button>
+          </div>`
               : '<span style="color:#94a3b8">—</span>'
           }
         </td>
@@ -5501,11 +5514,9 @@ function summaryIconHtml(icon) {
 }
 
 function cardHtml(title, value, icon = "projects") {
-  return `<article class="card metric-card">
-    <div class="metric-content">
-      <span>${escapeHtml(title)}</span>
-      <strong>${escapeHtml(value)}</strong>
-    </div>
+  return `<article class="stat-card highlight">
+    <div class="stat-label">${escapeHtml(title)}</div>
+    <div class="stat-value">${escapeHtml(value)}</div>
     ${summaryIconHtml(icon)}
   </article>`;
 }
@@ -5533,7 +5544,7 @@ function inlineSelect(field, projectId, currentValue, options, badgeClass = "") 
               : "";
   const hexColor = colorKey ? getConfigItemColor(colorKey, currentValue, 0, true) : "";
   const inlineStyle = hexColor ? ` style="background:${hexToRgba(hexColor, 0.16)};border-color:${hexToRgba(hexColor, 0.45)}"` : "";
-  const cls = `cell-inline-select${field === "status" && !inlineStyle && badgeClass ? ` status-${badgeClass}` : ""}`;
+  const cls = `isel${!currentValue || !hexColor ? " isel-nil" : ""}`;
   return `<select class="${cls}" data-action="inline-select" data-field="${field}" data-id="${projectId}"${inlineStyle}>
     ${values
       .map((value) => `<option value="${escapeHtml(value)}" ${String(currentValue || "") === String(value) ? "selected" : ""}>${escapeHtml(value || "—")}</option>`)

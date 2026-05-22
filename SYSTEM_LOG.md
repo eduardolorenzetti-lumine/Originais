@@ -216,6 +216,44 @@ CREATE INDEX projects_code_idx ON projects(code);
 
 ---
 
+---
+
+### [2026-05-21] ~17h30 — REFACTOR
+**O que foi feito:** Migração visual para o novo design system Lumine (branch `redesign`) — Fases 1–3.
+**Mudanças:**
+- Adicionado `dashboard/lumine-design-system.css` (2474 linhas — design system completo: Satoshi font, tokens `--yellow`/`--black`/`--off-white`, componentes Nav, Chip, Stat Card, Table, Gantt, Modal, etc.)
+- `index.html`: importa `lumine-design-system.css` antes de `styles.css`; app shell reestruturado de sidebar vertical para navbar horizontal (`.nav` + `.nav-links` + `.nav-right`); avatar circular (`.nav-avatar`) com iniciais do usuário
+- `styles.css`: modo claro como padrão (`:root` = light, dark apenas sob `[data-theme="dark"]`); body usa `--off-white` + fonte Satoshi; `.page` substitui `.content`; tokens de cor migrados para o design system
+- `script.js`: `applyAuthVisibility()` injeta iniciais do usuário no avatar da navbar
+**Branch:** `redesign` (isolado de `main` — seguro para testes sem afetar produção)
+**Feito por:** Claude
+
+---
+
+### [2026-05-21] ~19h00 — REFACTOR
+**O que foi feito:** Migração visual para o novo design system Lumine — Fases 4–7.
+
+**Fase 4 — Tabela de Projetos (`script.js` + `styles.css`):**
+- `inlineSelect()`: classe `cell-inline-select` substituída por `isel` + `isel-nil` (pill arredondado do design system). Cores dinâmicas via `getConfigItemColor` continuam aplicadas inline — `isel` fornece apenas o shape.
+- Botões de ação na tabela: `btn.icon-btn` → `act-btn` (editar) / `act-btn.danger` (excluir), agrupados em `.act-group`.
+- Adicionado `.act-btn svg` e `.isel` com chevron SVG no `styles.css`.
+
+**Fase 5 — Barras do Gantt (`styles.css`):**
+- `.stage-bar` atualizado com tokens do design system: `var(--r-xs)`, `font-size: 10px`, `font-weight: 600`, `color: var(--black)`.
+- Adicionado `transition: filter` + `hover: brightness(0.93)` (padrão `.gantt-bar` do design system).
+
+**Fase 6 — Tabela Rota (`script.js` + `styles.css`):**
+- `routeInlineSelect()` migrado para `.isel` / `.isel-nil` (mesmo padrão da tabela de projetos).
+- Overrides `.route-table-wrap` estendidos para cobrir `.isel`.
+
+**Fase 7 — Tela de Login e Loading Screen (`styles.css`):**
+- Tokens antigos (`var(--accent-ink)`, `var(--muted)`, `var(--line)`, `var(--accent)`) substituídos por `var(--mid)`, `var(--pale)`, `var(--yellow)`.
+- Spinner agora usa `border-top-color: var(--yellow)`.
+
+**Feito por:** Claude
+
+---
+
 ## Estado Atual do Sistema (2026-05-21)
 
 | Métrica                  | Valor              |
