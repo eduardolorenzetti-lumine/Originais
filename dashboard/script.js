@@ -67,7 +67,6 @@ const BASE44_FILES = [
 const DEFAULT_ADMIN_EMAIL = "eduardo.lorenzetti@lumine.tv";
 const LEGACY_ADMIN_EMAIL = "admin@originais.com";
 const DEFAULT_ADMIN_PASSWORD = "admin123";
-const DEFAULT_INVITED_PASSWORD = "lumine123";
 const SUPABASE_STATE_TABLE = "app_state";
 const SUPABASE_USERS_TABLE = "app_users";
 const SUPABASE_DEFAULT_STATE_ID = "originais-main";
@@ -75,8 +74,9 @@ const THEME_STORAGE_KEY = "lumine-theme";
 const THEME_VALUES = new Set(["dark", "light", "system"]);
 const MAX_AUDIT_LOG_ITEMS = 2000;
 
-let state = seedState();
+let state = null;
 let currentTab = "dashboard";
+let selectedDashboardView = "todos"; // "todos" | "producoes" | "rota"
 let selectedDashboardYears = new Set();
 let dashboardFiltersOpen = false;
 let selectedDashboardFilters = {
@@ -86,20 +86,19 @@ let selectedDashboardFilters = {
   natures: new Set(),
   durations: new Set(),
   flags: new Set(),
-  infantis: new Set(),
   distributions: new Set(),
   projects: new Set()
 };
 let selectedGanttYears = new Set();
 let ganttFiltersOpen = false;
 let selectedGanttFilters = {
+  stages: new Set(),
   statuses: new Set(),
   categories: new Set(),
   formats: new Set(),
   natures: new Set(),
   durations: new Set(),
   flags: new Set(),
-  infantis: new Set(),
   distributions: new Set(),
   projects: new Set()
 };
@@ -112,7 +111,6 @@ let selectedProjectFilters = {
   natures: new Set(),
   durations: new Set(),
   flags: new Set(),
-  infantis: new Set(),
   distributions: new Set(),
   projects: new Set()
 };
@@ -134,7 +132,7 @@ const projectFilterQueries = {
 let selectedConfigKey = "stages";
 let selectedStageRef = null;
 let routeSearchQuery = "";
-let collapsedRouteProjects = new Set();
+let expandedRouteProjects = new Set();
 let draggingStage = null;
 let draggingRelease = null;
 let suppressLineClickUntil = 0;
@@ -151,9 +149,12 @@ let supabaseBaseState = null;
 let lastSupabaseSyncError = "";
 let supabaseAuthSession = null;
 let supabaseAuthListenerBound = false;
+let supabaseInitialSessionHandled = false;
 let secureUsersLoaded = false;
 let supabaseLogoutInProgress = false;
+let supabaseAuthReady = false; // true após initializeSupabaseAuth concluir
 let remotePasswordPromptInProgress = false;
+let recoveryMode = false; // true quando usuário chegou via link de redefinição de senha
 let currentThemePreference = "system";
 let systemThemeMediaQuery = null;
 let pendingGanttMeasureRetry = false;
@@ -169,11 +170,13 @@ const FIELD_TO_SETTINGS_KEY = {
   distribution: "distributions",
   status: "statuses"
 };
+const FIXED_NATURE_LABEL = "Short doc";
 const PROJECT_FLAG_FIELDS = [
   { key: "cpb", label: "CPB" },
   { key: "crt", label: "CRT" },
   { key: "imdb", label: "IMDb" }
 ];
+const PROJECT_RECORD_FILTER_FIELDS = [{ key: "infantil", label: "Infantil" }, ...PROJECT_FLAG_FIELDS];
 
 function getSupabaseProjectRef() {
   const { url } = getSupabaseConfig();
@@ -502,23 +505,29 @@ function bindGlobalActions() {
     }
     openUserDialog();
   });
-  document.getElementById("btnInviteUser")?.addEventListener("click", () => {
-    if (!canManageUsers()) {
-      alert("Apenas ADMIN pode gerir usuários.");
-      return;
-    }
-    openInviteDialog();
-  });
 
-  document.getElementById("btnImportCsv").addEventListener("click", () => {
-    if (!canEditContent()) {
-      alert("Perfil LEITOR possui apenas visualização.");
-      return;
+  const refreshFromSupabaseOnReturn = async () => {
+    if (!isRemoteSupabaseAuthEnabled() || !supabaseAuthSession?.access_token) return;
+    const stateChanged = await refreshStateFromSupabaseNow();
+    let usersChanged = false;
+    try {
+      await refreshSecureUsersFromSupabase({ persist: true });
+      usersChanged = true;
+    } catch (error) {
+      console.warn("[Originais] Falha ao atualizar usuários ao retomar a aba.", error?.message || error);
     }
-    document.getElementById("csvInput").click();
-  });
+    if (stateChanged || usersChanged) {
+      applyAuthVisibility();
+      renderAll();
+    }
+  };
 
-  document.getElementById("csvInput").addEventListener("change", importCsvFile);
+  window.addEventListener("focus", () => {
+    void refreshFromSupabaseOnReturn();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void refreshFromSupabaseOnReturn();
+  });
 
   document.getElementById("btnAddConfig").addEventListener("click", () => {
     if (!canEditContent()) {
@@ -723,9 +732,54 @@ function bindGanttDelegatedInteractions() {
 }
 
 function bindAuthActions() {
+  // Formulário de redefinição de senha (tela recovery)
+  const recoveryForm = document.getElementById("recoveryForm");
+  const recoveryError = document.getElementById("recoveryError");
+  if (recoveryForm) {
+    recoveryForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const pwd = document.getElementById("recoveryPassword").value;
+      const confirm = document.getElementById("recoveryPasswordConfirm").value;
+      if (recoveryError) recoveryError.hidden = true;
+
+      if (pwd !== confirm) {
+        if (recoveryError) { recoveryError.textContent = "As senhas não conferem."; recoveryError.hidden = false; }
+        return;
+      }
+      if (pwd.length < 6) {
+        if (recoveryError) { recoveryError.textContent = "A senha deve ter no mínimo 6 caracteres."; recoveryError.hidden = false; }
+        return;
+      }
+
+      recoveryForm.classList.add("is-processing");
+
+      const { error } = await getSupabaseClient().auth.updateUser({ password: pwd });
+
+      recoveryForm.classList.remove("is-processing");
+
+      if (error) {
+        const msg = String(error.message || "").toLowerCase();
+        const isSamePassword = msg.includes("same") || msg.includes("different") || msg.includes("antiga") || msg.includes("igual");
+        if (recoveryError) {
+          recoveryError.textContent = isSamePassword
+            ? "A nova senha não pode ser igual à senha atual. Escolha uma senha diferente."
+            : "Não foi possível salvar a senha. Tente novamente.";
+          recoveryError.hidden = false;
+        }
+        return;
+      }
+
+      // Limpar campos e sair do modo recovery
+      document.getElementById("recoveryPassword").value = "";
+      document.getElementById("recoveryPasswordConfirm").value = "";
+      recoveryMode = false;
+      clearSupabaseAuthCallbackUrl();
+      applyAuthVisibility();
+    });
+  }
+
   const loginForm = document.getElementById("loginForm");
   const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
-  const firstAccessBtn = document.getElementById("firstAccessBtn");
   const profileMenuBtn = document.getElementById("profileMenuBtn");
   const profileMenu = document.getElementById("profileMenu");
   const profileMenuList = document.getElementById("profileMenuList");
@@ -747,6 +801,11 @@ function bindAuthActions() {
           return;
         }
       }
+      const knownEmails = (state.users || []).map((u) => normalizeUserEmail(u.email));
+      if (knownEmails.length && !knownEmails.includes(email)) {
+        showLoginError("E-mail não cadastrado no sistema. Entre em contato com o administrador.");
+        return;
+      }
       const signedIn = await signInWithSupabasePassword(email, password);
       if (!signedIn) return;
       loginForm.reset();
@@ -762,7 +821,8 @@ function bindAuthActions() {
       user = authenticateUser(email, password);
     }
     if (!user) {
-      showLoginError("E-mail ou senha inválidos.");
+      const emailExists = (state.users || []).some((u) => normalizeUserEmail(u.email) === email);
+      showLoginError(emailExists ? "Senha incorreta." : "E-mail não cadastrado no sistema. Entre em contato com o administrador.");
       return;
     }
     if (user.firstAccessPending) {
@@ -785,11 +845,6 @@ function bindAuthActions() {
   forgotPasswordBtn.addEventListener("click", () => {
     if (isRemoteSupabaseAuthEnabled()) {
       const email = String(document.getElementById("loginEmail").value || "").trim().toLowerCase();
-      const localUser = (state.users || []).find((user) => normalizeUserEmail(user.email) === normalizeUserEmail(email));
-      if (localUser?.firstAccessPending) {
-        showLoginError('Esse usuário ainda não criou a senha. Use "Primeiro acesso".');
-        return;
-      }
       if (supabaseAuthSession?.access_token && normalizeUserEmail(getCurrentAuthEmail()) === email) {
         void promptRemotePasswordSetup({ contextLabel: "redefinir sua senha", required: true });
         return;
@@ -799,16 +854,6 @@ function bindAuthActions() {
     }
     void startForgotPasswordFlow();
   });
-  firstAccessBtn?.addEventListener("click", () => {
-    if (isRemoteSupabaseAuthEnabled()) {
-      const email = String(document.getElementById("loginEmail").value || "").trim().toLowerCase();
-      const password = String(document.getElementById("loginPassword").value || "");
-      void startRemoteFirstAccess(email, password);
-      return;
-    }
-    void startFirstAccessFlow();
-  });
-
   profileMenuBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     profileMenuList.hidden = !profileMenuList.hidden;
@@ -841,44 +886,17 @@ function updateLoginModeUi() {
   const passwordInput = document.getElementById("loginPassword");
   const submitButton = document.querySelector("#loginForm button[type='submit']");
   const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
-  const firstAccessBtn = document.getElementById("firstAccessBtn");
   if (isRemoteSupabaseAuthEnabled()) {
     if (passwordLabel) passwordLabel.hidden = false;
     if (passwordInput) passwordInput.required = true;
     if (submitButton) submitButton.textContent = "Entrar";
     if (forgotPasswordBtn) forgotPasswordBtn.textContent = "Esqueci minha senha!";
-    if (firstAccessBtn) firstAccessBtn.hidden = false;
     return;
   }
   if (passwordLabel) passwordLabel.hidden = false;
   if (passwordInput) passwordInput.required = true;
   if (submitButton) submitButton.textContent = "Entrar";
   if (forgotPasswordBtn) forgotPasswordBtn.textContent = "Esqueci minha senha!";
-  if (firstAccessBtn) firstAccessBtn.hidden = false;
-}
-
-async function sendMagicLink(email, { allowCreate = false, showGenericSuccess = false } = {}) {
-  if (!isRemoteSupabaseAuthEnabled()) return false;
-  const normalizedEmail = normalizeUserEmail(email);
-  if (!normalizedEmail) {
-    showLoginError("Informe o e-mail para receber o link de acesso.");
-    return false;
-  }
-  const client = getSupabaseClient();
-  const { error } = await client.auth.signInWithOtp({
-    email: normalizedEmail,
-    options: {
-      shouldCreateUser: allowCreate,
-      emailRedirectTo: `${window.location.origin}${window.location.pathname}`
-    }
-  });
-  if (error) {
-    showLoginError("Não foi possível enviar o link de acesso. Confirme se o e-mail está autorizado.");
-    console.warn("[Originais] Falha ao enviar Magic Link.", error.message || error);
-    return false;
-  }
-  if (showGenericSuccess) showLoginError("Se o e-mail estiver autorizado, enviaremos um link de acesso.", { tone: "success" });
-  return true;
 }
 
 async function signInWithSupabasePassword(email, password) {
@@ -902,7 +920,8 @@ async function signInWithSupabasePassword(email, password) {
   supabaseAuthSession = data?.session || supabaseAuthSession;
   const signedIn = await syncCurrentUserFromSupabaseSession({ persistUsers: true });
   if (!signedIn) return false;
-  setUserFirstAccessPending(normalizedEmail, false);
+  const firstAccessCompleted = await ensureRemoteFirstAccessCompleted(normalizedEmail);
+  if (!firstAccessCompleted) return false;
   persistSessionUser();
   clearLoginError();
   return true;
@@ -930,54 +949,6 @@ async function sendSupabasePasswordReset(email, { showGenericSuccess = false } =
     return false;
   }
   if (showGenericSuccess) showLoginError("Se o e-mail estiver autorizado, enviaremos um link para redefinir sua senha.", { tone: "success" });
-  return true;
-}
-
-async function startRemoteFirstAccess(email, password) {
-  if (!isRemoteSupabaseAuthEnabled()) return false;
-  const normalizedEmail = normalizeUserEmail(email);
-  const rawPassword = String(password || "");
-  if (!normalizedEmail) {
-    showLoginError("Informe o e-mail cadastrado.");
-    return false;
-  }
-  if (!rawPassword || rawPassword.length < 6) {
-    showLoginError('Digite a senha desejada no campo "Senha" (mínimo 6 caracteres) e clique em "Primeiro acesso".');
-    return false;
-  }
-
-  const client = getSupabaseClient();
-  const { data, error } = await client.auth.signUp({
-    email: normalizedEmail,
-    password: rawPassword
-  });
-
-  if (error) {
-    const message = String(error.message || error || "").toLowerCase();
-    if (message.includes("already registered") || message.includes("already been registered") || message.includes("user already registered")) {
-      showLoginError('Esse acesso já foi criado. Faça login normalmente ou use "Esqueci minha senha!".');
-      return false;
-    }
-    showLoginError("Não foi possível concluir o primeiro acesso agora.");
-    console.warn("[Originais] Falha ao concluir primeiro acesso.", error.message || error);
-    return false;
-  }
-
-  if (data?.session) {
-    supabaseAuthSession = data.session;
-    const signedIn = await syncCurrentUserFromSupabaseSession({ persistUsers: true });
-    if (!signedIn) return false;
-    setUserFirstAccessPending(normalizedEmail, false);
-    persistSessionUser();
-    clearLoginError();
-    document.getElementById("loginForm")?.reset();
-    openTab("dashboard");
-    applyAuthVisibility();
-    renderAll();
-    return true;
-  }
-
-  showLoginError("Primeiro acesso concluído. Agora entre com e-mail e senha.", { tone: "success" });
   return true;
 }
 
@@ -1016,6 +987,38 @@ async function promptRemotePasswordSetup({ contextLabel = "definir sua senha", r
   }
 }
 
+async function ensureRemoteFirstAccessCompleted(email = "") {
+  if (!isRemoteSupabaseAuthEnabled()) return true;
+  const normalizedEmail = normalizeUserEmail(email || getCurrentAuthEmail());
+  if (!normalizedEmail) return false;
+  const current = (state.users || []).find((user) => normalizeUserEmail(user?.email) === normalizedEmail) || null;
+  if (!current?.firstAccessPending) return true;
+
+  const completed = await promptRemotePasswordSetup({
+    contextLabel: "trocar sua senha provisória e concluir o primeiro acesso",
+    required: true
+  });
+  if (!completed) {
+    try {
+      await getSupabaseClient().auth.signOut({ scope: "local" });
+    } catch (error) {
+      console.warn("[Originais] Falha ao encerrar sessão após erro no primeiro acesso.", error?.message || error);
+    }
+    clearSupabaseStoredSession();
+    supabaseAuthSession = null;
+    currentUserId = "";
+    persistSessionUser();
+    showLoginError("Não foi possível concluir a troca da senha provisória. Tente novamente.");
+    applyAuthVisibility();
+    renderAll();
+    return false;
+  }
+
+  setUserFirstAccessPending(normalizedEmail, false, current.role);
+  saveState({ skipSupabase: true });
+  return true;
+}
+
 async function syncCurrentUserFromSupabaseSession({ persistUsers = true } = {}) {
   if (!isRemoteSupabaseAuthEnabled()) return false;
   const email = getCurrentAuthEmail();
@@ -1042,8 +1045,10 @@ async function syncCurrentUserFromSupabaseSession({ persistUsers = true } = {}) 
     refreshedUsers = true;
   } catch (error) {
     console.warn("[Originais] Falha ao carregar usuários seguros.", error?.message || error);
-    state.users = cachedUsers;
-    secureUsersLoaded = cachedUsers.length > 0;
+    state.users = currentSecureUser
+      ? [...cachedUsers.filter((user) => normalizeUserEmail(user?.email) !== email), currentSecureUser]
+      : cachedUsers;
+    secureUsersLoaded = state.users.length > 0;
   }
   currentUserId = email;
   const current = getCurrentUser();
@@ -1065,8 +1070,16 @@ async function syncCurrentUserFromSupabaseSession({ persistUsers = true } = {}) 
 function bindSupabaseAuthListener() {
   if (supabaseAuthListenerBound || !isRemoteSupabaseAuthEnabled()) return;
   supabaseAuthListenerBound = true;
-  getSupabaseClient().auth.onAuthStateChange(async (_event, session) => {
+  getSupabaseClient().auth.onAuthStateChange(async (event, session) => {
+    if (supabaseLogoutInProgress) return;
     supabaseAuthSession = session || null;
+    // TOKEN_REFRESHED apenas atualiza a referência da sessão, sem re-sincronizar o usuário
+    if (event === "TOKEN_REFRESHED") return;
+    // INITIAL_SESSION é tratado pelo initializeSupabaseAuth para evitar dupla execução
+    if (event === "INITIAL_SESSION") {
+      supabaseInitialSessionHandled = true;
+      return;
+    }
     const signedIn = await syncCurrentUserFromSupabaseSession({ persistUsers: true });
     if (!session || !signedIn) {
       currentUserId = "";
@@ -1075,6 +1088,8 @@ function bindSupabaseAuthListener() {
       renderAll();
       return;
     }
+    const firstAccessCompleted = await ensureRemoteFirstAccessCompleted(getCurrentAuthEmail());
+    if (!firstAccessCompleted) return;
     persistSessionUser();
     applyAuthVisibility();
     renderAll();
@@ -1103,18 +1118,28 @@ async function initializeSupabaseAuth() {
   const { data, error } = await getSupabaseClient().auth.getSession();
   if (error) {
     console.warn("[Originais] Falha ao obter sessão do Supabase.", error.message || error);
+    supabaseAuthReady = true;
     setLoginProcessingState(false);
     applyAuthVisibility();
     return;
   }
   supabaseAuthSession = data.session || null;
   if (!supabaseAuthSession) {
+    supabaseAuthReady = true;
     setLoginProcessingState(false);
     applyAuthVisibility();
     return;
   }
   const signedIn = await syncCurrentUserFromSupabaseSession({ persistUsers: true });
   if (!signedIn) {
+    supabaseAuthReady = true;
+    setLoginProcessingState(false);
+    applyAuthVisibility();
+    return;
+  }
+  const firstAccessCompleted = await ensureRemoteFirstAccessCompleted(getCurrentAuthEmail());
+  if (!firstAccessCompleted) {
+    supabaseAuthReady = true;
     setLoginProcessingState(false);
     applyAuthVisibility();
     return;
@@ -1122,15 +1147,15 @@ async function initializeSupabaseAuth() {
   persistSessionUser();
   if (callbackMode) clearSupabaseAuthCallbackUrl();
   if (callbackMode === "recovery") {
-    const updated = await promptRemotePasswordSetup({ contextLabel: "redefinir sua senha", required: true });
-    if (!updated) {
-      await logoutCurrentUser();
-      setLoginProcessingState(false);
-      return;
-    }
+    recoveryMode = true;
+    supabaseAuthReady = true;
+    setLoginProcessingState(false);
+    applyAuthVisibility();
+    return;
   } else if (callbackMode === "magiclink") {
     await promptRemotePasswordSetup({ contextLabel: "definir sua senha para os próximos acessos", required: true });
   }
+  supabaseAuthReady = true;
   setLoginProcessingState(false);
 }
 
@@ -1144,8 +1169,10 @@ function authenticateUser(email, password) {
       user.passwordHash = hashPassword(DEFAULT_ADMIN_PASSWORD);
       saveState();
       return user;
+    }
+    return null;
   }
-  return null;
+  return passwordHash === hashPassword(password) ? user : null;
 }
 
 function clearSupabaseStoredSession() {
@@ -1163,8 +1190,6 @@ function clearSupabaseStoredSession() {
     }
     keysToRemove.forEach((key) => storage.removeItem(key));
   } catch (_) {}
-}
-  return passwordHash === hashPassword(password) ? user : null;
 }
 
 function getCurrentUser() {
@@ -1195,7 +1220,12 @@ function canManageUsers() {
 
 function canEditContent() {
   const role = getCurrentUserRole();
-  return role === "ADMIN" || role === "EDITOR" || role.includes("ADMIN") || role.includes("EDIT");
+  return role === "ADMIN" || role === "EDITOR" || role.includes("ADMIN");
+}
+
+function canEditRoute() {
+  const role = getCurrentUserRole();
+  return role === "ADMIN" || role === "EDITOR" || role === "EDITOR ROTA" || role.includes("ADMIN");
 }
 
 function canViewUsers() {
@@ -1244,10 +1274,50 @@ function applyAuthVisibility() {
   const canEdit = canEditContent();
   const canSeeUsers = canViewUsers();
 
+  // Enquanto o Supabase Auth ainda não confirmou a sessão, mantém ambas as telas
+  // ocultas e exibe o splash screen para evitar o flash da tela de login no refresh
+  const authStillPending = isRemoteSupabaseAuthEnabled() && !supabaseAuthReady && !user;
+  const splash = document.getElementById("authLoadingScreen");
+  if (authStillPending) {
+    loginView.hidden = true;
+    setLoginPasswordFieldType(false);
+    appShell.hidden = true;
+    if (splash) splash.classList.remove("hidden");
+    return;
+  }
+  if (splash) splash.classList.add("hidden");
+
+  const recoveryView = document.getElementById("recoveryView");
+  if (recoveryMode && user) {
+    if (recoveryView) {
+      recoveryView.hidden = false;
+      // Converter campos para type="password" ao exibir o formulário
+      const rp = document.getElementById("recoveryPassword");
+      const rc = document.getElementById("recoveryPasswordConfirm");
+      if (rp) rp.type = "password";
+      if (rc) rc.type = "password";
+    }
+    loginView.hidden = true;
+    setLoginPasswordFieldType(false);
+    appShell.hidden = true;
+    return;
+  }
+  if (recoveryView) recoveryView.hidden = true;
   loginView.hidden = Boolean(user) && !pendingAuth;
   appShell.hidden = !user || pendingAuth;
+  setLoginPasswordFieldType(!loginView.hidden);
   if (profileMenuList) profileMenuList.hidden = true;
   if (profileMenuUser) profileMenuUser.textContent = user ? `${user.name || "Usuário"} • ${user.role || "LEITOR"}` : "";
+  // Atualiza iniciais no avatar da navbar
+  const profileMenuBtn = document.getElementById("profileMenuBtn");
+  if (profileMenuBtn && user) {
+    const name = user.name || user.email || "U";
+    const parts = name.trim().split(/\s+/);
+    const initials = parts.length >= 2
+      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+      : name.slice(0, 2).toUpperCase();
+    profileMenuBtn.textContent = initials;
+  }
   const btnCreateUser = document.getElementById("btnCreateUser");
   if (btnCreateUser) btnCreateUser.hidden = !isAdmin;
   const usersNavBtn = document.querySelector('.nav-btn[data-tab="usuarios"]');
@@ -1256,7 +1326,6 @@ function applyAuthVisibility() {
   const readOnlyControls = [
     "btnNewProject",
     "btnQuickNewProject",
-    "btnImportCsv",
     "btnAddConfig",
     "applyTimeline"
   ];
@@ -1283,6 +1352,11 @@ function applyAuthVisibility() {
   updateThemeOptionButtons();
 }
 
+function setLoginPasswordFieldType(visible) {
+  const input = document.getElementById("loginPassword");
+  if (input) input.type = visible ? "password" : "text";
+}
+
 function ensureAuthSurfaceVisible() {
   const loginView = document.getElementById("loginView");
   const appShell = document.getElementById("appShell");
@@ -1291,6 +1365,7 @@ function ensureAuthSurfaceVisible() {
   const user = getCurrentUser();
   loginView.hidden = Boolean(user);
   appShell.hidden = !user;
+  setLoginPasswordFieldType(!loginView.hidden);
 }
 
 async function logoutCurrentUser() {
@@ -1404,37 +1479,6 @@ async function startForgotPasswordFlow() {
   alert("Senha atualizada com sucesso.");
 }
 
-async function startFirstAccessFlow() {
-  if (isRemoteSupabaseAuthEnabled()) {
-    const email = prompt("Informe o e-mail do convite:");
-    if (!email) return;
-    await sendMagicLink(email, { allowCreate: true, showGenericSuccess: true });
-    return;
-  }
-  const email = prompt("Informe o e-mail do convite:");
-  if (!email) return;
-  const normalizedEmail = String(email).trim().toLowerCase();
-  let user = state.users.find((item) => String(item.email || "").toLowerCase() === normalizedEmail);
-  if (!user) {
-    await refreshStateFromSupabaseNow();
-    user = state.users.find((item) => String(item.email || "").toLowerCase() === normalizedEmail);
-  }
-  if (!user) {
-    alert("E-mail não encontrado.");
-    return;
-  }
-  if (!user.firstAccessPending) {
-    alert("Esse usuário já concluiu o primeiro acesso. Use \"Esqueci minha senha\" se necessário.");
-    return;
-  }
-  const updated = promptPasswordSetup(user, { contextLabel: "primeiro acesso", completeFirstAccess: true });
-  if (!updated) return;
-  document.getElementById("loginEmail").value = user.email || normalizedEmail;
-  document.getElementById("loginPassword").value = "";
-  clearLoginError();
-  alert("Primeiro acesso concluído. Faça login com a nova senha.");
-}
-
 function ensureAdminAccount() {
   if (!Array.isArray(state.users)) state.users = [];
   const normalizedDefaultEmail = DEFAULT_ADMIN_EMAIL.toLowerCase();
@@ -1481,8 +1525,6 @@ function bindDialog() {
   const configItemForm = document.getElementById("configItemForm");
   const userDialog = document.getElementById("userDialog");
   const userForm = document.getElementById("userForm");
-  const inviteDialog = document.getElementById("inviteDialog");
-  const inviteForm = document.getElementById("inviteForm");
   const routeItemDialog = document.getElementById("routeItemDialog");
   const routeItemForm = document.getElementById("routeItemForm");
   const routeProjectDialog = document.getElementById("routeProjectDialog");
@@ -1493,7 +1535,8 @@ function bindDialog() {
   const projectReleaseDateTextInput = document.getElementById("projectReleaseDateText");
   const projectReleaseDatePickerInput = document.getElementById("projectReleaseDatePicker");
   const projectReleaseDateOpenBtn = document.getElementById("projectReleaseDateOpen");
-  const projectBudgetInput = document.getElementById("projectBudget");
+  const projectSpentProductionInput = document.getElementById("projectSpentProduction");
+  const projectSpentTeamInput = document.getElementById("projectSpentTeam");
   const projectStatusSelect = document.getElementById("projectStatus");
 
   document.getElementById("btnCancelDialog").addEventListener("click", () => dialog.close());
@@ -1509,7 +1552,7 @@ function bindDialog() {
     state.projects = state.projects.filter((p) => p.id !== id);
     state.routeProjects = normalizeRouteProjectIds((state.routeProjects || []).filter((projectId) => projectId !== id));
     state.routes = (state.routes || []).filter((item) => item.projectId !== id);
-    collapsedRouteProjects.delete(id);
+    expandedRouteProjects.delete(id);
     saveState();
     dialog.close();
     renderAll();
@@ -1587,9 +1630,15 @@ function bindDialog() {
     input.addEventListener("change", updateStageDialogMonthLabels);
   });
 
-  projectBudgetInput.addEventListener("blur", () => {
-    const parsed = parseCurrencyInputBRL(projectBudgetInput.value);
-    projectBudgetInput.value = parsed === null ? "" : formatCurrencyInputBRL(parsed);
+  projectSpentProductionInput.addEventListener("blur", () => {
+    const parsed = parseCurrencyInputBRL(projectSpentProductionInput.value);
+    projectSpentProductionInput.value = parsed === null ? "" : formatCurrencyInputBRL(parsed);
+    updateProjectSpentTotal();
+  });
+  projectSpentTeamInput.addEventListener("blur", () => {
+    const parsed = parseCurrencyInputBRL(projectSpentTeamInput.value);
+    projectSpentTeamInput.value = parsed === null ? "" : formatCurrencyInputBRL(parsed);
+    updateProjectSpentTotal();
   });
 
   form.addEventListener("submit", (e) => {
@@ -1678,23 +1727,38 @@ function bindDialog() {
     e.preventDefault();
     const payload = collectUserForm();
     if (!payload) return;
+    let successMessage = "Usuário salvo com sucesso.";
 
     if (isRemoteSupabaseAuthEnabled()) {
-      const isNewRemoteUser = !state.users.some(
-        (user) =>
-          String(user.id || "").trim() === payload.id ||
-          normalizeUserEmail(user.email) === normalizeUserEmail(payload.email)
-      );
       try {
+        // 1. Salvar metadados na tabela app_users
         await upsertSecureUserInSupabase(payload);
-        if (payload.password && normalizeUserEmail(payload.email) === normalizeUserEmail(getCurrentAuthEmail())) {
+
+        const isSelf = normalizeUserEmail(payload.email) === normalizeUserEmail(getCurrentAuthEmail());
+
+        if (isSelf && payload.password) {
+          // Próprio usuário alterando a própria senha
           const { error } = await getSupabaseClient().auth.updateUser({ password: payload.password });
           if (error) throw error;
+          successMessage = "Senha alterada com sucesso.";
+        } else if (payload.sendInvite) {
+          // Novo usuário sem senha → enviar convite por e-mail
+          const { error } = await setUserPasswordAsAdmin(payload.email, "", { sendInvite: true });
+          if (error) throw new Error(error.message || String(error));
+          successMessage = `Convite enviado para ${payload.email}!\n\nO usuário receberá um e-mail para definir sua senha.`;
+        } else if (canManageUsers() && payload.password && !isSelf) {
+          // Admin definindo/redefinindo senha de outro usuário
+          const { error } = await setUserPasswordAsAdmin(payload.email, payload.password);
+          if (error) throw new Error(error.message || String(error));
+          successMessage = `Usuário salvo!\n\nE-mail: ${payload.email}\nSenha provisória: ${payload.password}\nFunção: ${payload.role}\n\nCompartilhe essas credenciais com o usuário.`;
+        } else {
+          successMessage = "Usuário salvo com sucesso.";
         }
-        setUserFirstAccessPending(payload.email, Boolean(payload.firstAccessPending));
+
+        setUserFirstAccessPending(payload.email, Boolean(payload.firstAccessPending), payload.role);
         await refreshSecureUsersFromSupabase({ persist: true });
       } catch (error) {
-        alert("Não foi possível salvar o usuário no Supabase.");
+        alert("Não foi possível salvar o usuário: " + (error?.message || "erro desconhecido"));
         console.warn("[Originais] Falha ao salvar usuário seguro.", error?.message || error);
         return;
       }
@@ -1705,77 +1769,16 @@ function bindDialog() {
       saveState();
     }
 
+    // Limpar campos de senha antes de fechar para evitar prompt "Salvar Senha?" do browser
+    const pwdField = document.getElementById("userPassword");
+    const pwdConfirmField = document.getElementById("userPasswordConfirm");
+    if (pwdField) pwdField.value = "";
+    if (pwdConfirmField) pwdConfirmField.value = "";
+
     userDialog.close();
     renderUsers();
     applyAuthVisibility();
-  });
-
-  document.getElementById("inviteCancelBtn").addEventListener("click", () => inviteDialog.close());
-  inviteForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (!canManageUsers()) {
-      alert("Apenas ADMIN pode gerir usuários.");
-      inviteDialog.close();
-      return;
-    }
-    const payload = collectInviteForm();
-    if (!payload) return;
-    if (isRemoteSupabaseAuthEnabled()) {
-      try {
-        await upsertSecureUserInSupabase({
-          id: payload.email,
-          name: displayNameFromEmail(payload.email),
-          email: payload.email,
-          role: payload.role,
-          active: true,
-          invitedAt: new Date().toISOString()
-        });
-        await refreshSecureUsersFromSupabase({ persist: true });
-        const sent = await sendMagicLink(payload.email, { allowCreate: true });
-        if (!sent) {
-          alert("Usuário salvo, mas o e-mail do Magic Link não pôde ser enviado.");
-        } else {
-          alert("Convite enviado por e-mail com sucesso. O usuário definirá a senha no primeiro acesso.");
-        }
-      } catch (error) {
-        alert("Não foi possível convidar o usuário.");
-        console.warn("[Originais] Falha ao convidar usuário via Supabase.", error?.message || error);
-        return;
-      }
-      renderUsers();
-      inviteDialog.close();
-      return;
-    }
-    const inviteLink = buildUserInviteLink(payload.email, payload.role);
-    const existingIdx = state.users.findIndex((user) => String(user.email || "").toLowerCase() === payload.email);
-    const invitedAt = new Date().toISOString().slice(0, 10);
-    const passwordHash = hashPassword(DEFAULT_INVITED_PASSWORD);
-    if (existingIdx >= 0) {
-      const existing = state.users[existingIdx];
-      state.users[existingIdx] = {
-        ...existing,
-        name: String(existing.name || "").trim() || displayNameFromEmail(payload.email),
-        email: payload.email,
-        role: payload.role,
-        invitedAt,
-        passwordHash,
-        firstAccessPending: true
-      };
-    } else {
-      state.users.push({
-        id: uid(),
-        name: displayNameFromEmail(payload.email),
-        email: payload.email,
-        role: payload.role,
-        passwordHash,
-        invitedAt,
-        firstAccessPending: true
-      });
-    }
-    saveState();
-    renderUsers();
-    inviteDialog.close();
-    window.location.href = inviteLink;
+    alert(successMessage);
   });
 
   document.getElementById("btnCancelRouteProject")?.addEventListener("click", () => routeProjectDialog.close());
@@ -1785,18 +1788,26 @@ function bindDialog() {
       alert("Perfil LEITOR possui apenas visualização.");
       return;
     }
+    if (!canEditRoute()) {
+      alert("Perfil LEITOR possui apenas visualização.");
+      return;
+    }
     const projectId = String(routeProjectDialogSelection || "").trim();
     if (!projectId) {
       alert("Selecione um filme.");
       return;
     }
     state.routeProjects = normalizeRouteProjectIds([...(state.routeProjects || []), projectId]);
-    collapsedRouteProjects.delete(projectId);
+    expandedRouteProjects.delete(projectId); // novo filme entra recolhido por padrão
     projectFilterQueries.routeProjects = "";
     routeProjectDialogSelection = "";
     saveState();
     routeProjectDialog.close();
     renderRoute();
+  });
+
+  document.getElementById("btnCloseRouteInfo")?.addEventListener("click", () => {
+    document.getElementById("routeInfoDialog")?.close();
   });
 
   document.getElementById("btnCancelRouteItem").addEventListener("click", () => routeItemDialog.close());
@@ -1830,7 +1841,7 @@ function bindDialog() {
     }
     saveState();
     routeItemDialog.close();
-    collapsedRouteProjects.delete(item.projectId);
+    expandedRouteProjects.add(item.projectId); // expande o filme ao salvar festival
     renderRoute();
   });
 }
@@ -1854,36 +1865,250 @@ function renderAll() {
 }
 
 function renderDashboard() {
-  renderDashboardYearChips();
-  renderDashboardExtraFilters();
-  const allProjects = [...state.projects];
-  const projects = filteredDashboardProjects();
+  renderDashboardViewTabs();
 
-  const totalProjects = allProjects.length;
-  const projectsWithSpent = projects
-    .map((p) => ({ p, value: getProjectSpentValue(p) }))
-    .filter((item) => item.value !== null);
-  const totalSpent = projectsWithSpent.reduce((acc, item) => acc + item.value, 0);
-  const avgSpent = projectsWithSpent.length ? totalSpent / projectsWithSpent.length : 0;
+  const showProducoes = selectedDashboardView !== "rota";
+  const showRota = selectedDashboardView !== "producoes";
 
-  document.getElementById("summaryCards").innerHTML = [
-    cardHtml("Total de Produções", String(totalProjects), "projects"),
-    cardHtml("Total Gasto", money(totalSpent), "spent"),
-    cardHtml("Gasto Médio por Projeto", money(avgSpent), "avg")
-  ].join("");
+  // Mostrar/ocultar controles de filtro por ano (não relevante para Rota)
+  const prodControls = document.getElementById("dashboardProdControls");
+  const filtersPanel = document.getElementById("dashboardFiltersPanel");
+  if (prodControls) prodControls.hidden = !showProducoes;
+  if (!showProducoes && filtersPanel) filtersPanel.hidden = true;
 
-  const categoryPicker = (project) => getNormalizedProjectField(project, "category", { strict: true });
-  const formatPicker = (project) => getNormalizedProjectField(project, "format", { strict: true });
-  const naturePicker = (project) => getNormalizedProjectField(project, "nature", { strict: true });
-  const durationPicker = (project) => getNormalizedProjectField(project, "duration", { strict: true });
+  if (showProducoes) {
+    renderDashboardYearChips();
+    renderDashboardExtraFilters();
+  }
 
-  renderBarChart(document.getElementById("chartByYear"), countByYearWithMissing(projects), "vertical", ["#f3ba00"]);
-  renderBarChart(document.getElementById("chartByStatus"), countBy(projects, (p) => getProjectField(p, "status"), true), "vertical", ["#10b981", "#3b82f6", "#f59e0b", "#94a3b8"]);
-  renderBarChart(document.getElementById("chartByCategory"), countBy(projects, categoryPicker, true), "vertical", ["#10b981", "#3b82f6", "#f59e0b", "#94a3b8"]);
-  renderBarChart(document.getElementById("chartByFormat"), countBy(projects, formatPicker, true), "vertical", ["#10b981", "#3b82f6", "#f59e0b"]);
-  renderBarChart(document.getElementById("chartByNature"), countBy(projects, naturePicker, true), "vertical", ["#10b981", "#3b82f6", "#f59e0b"]);
-  renderBarChart(document.getElementById("chartByDuration"), countBy(projects, durationPicker, true), "vertical", ["#10b981", "#3b82f6", "#f59e0b"]);
-  renderBarChart(document.getElementById("chartAvgStage"), avgMonthsByStage(projects), "horizontal", ["#94a3b8", "#60a5fa", "#fcd34d", "#34d399", "#f472b6"]);
+  const projectsSection = document.getElementById("projectsDashboardSection");
+  const routeSection = document.getElementById("routeDashboardSection");
+  if (projectsSection) projectsSection.hidden = !showProducoes;
+  if (routeSection) routeSection.hidden = !showRota;
+
+  if (showProducoes) {
+    const allProjects = [...state.projects];
+    const projects = filteredDashboardProjects();
+
+    const totalProjects = allProjects.length;
+    const { regularSpent, shortDocSpent } = getDashboardSpentCollections(projects);
+    const totalSpent = regularSpent.reduce((acc, item) => acc + item.value, 0);
+    const totalProduction = regularSpent.reduce((acc, item) => acc + item.production, 0);
+    const totalTeam = regularSpent.reduce((acc, item) => acc + item.team, 0);
+    const avgSpent = regularSpent.length ? totalSpent / regularSpent.length : 0;
+    const shortDocSpentTotal = shortDocSpent.reduce((acc, item) => acc + item.value, 0);
+
+    document.getElementById("summaryCards").innerHTML = [
+      cardHtml("Produções", String(totalProjects), "projects"),
+      cardHtml("Investimento Total", money(totalSpent), "spent"),
+      cardHtml("Custo de Produção", money(totalProduction), "production"),
+      cardHtml("Cachê de Equipe", money(totalTeam), "team"),
+      cardHtml("Média por Produção", money(avgSpent), "avg")
+    ].join("");
+
+    const categoryPicker = (project) => getNormalizedProjectField(project, "category", { strict: true });
+    const formatPicker = (project) => getNormalizedProjectField(project, "format", { strict: true });
+    const naturePicker = (project) => getNormalizedProjectField(project, "nature", { strict: true });
+    const durationPicker = (project) => getNormalizedProjectField(project, "duration", { strict: true });
+
+    renderBarChart(document.getElementById("chartByYear"), countByYearWithMissing(projects), "vertical", ["#f3ba00"]);
+    renderHorizontalBarChart(document.getElementById("chartByStatus"), countBy(projects, (p) => getProjectField(p, "status"), true), getConfigColors("statuses"));
+    renderHorizontalBarChart(document.getElementById("chartByCategory"), countBy(projects, categoryPicker, true), getConfigColors("categories"));
+    renderHorizontalBarChart(document.getElementById("chartByFormat"), countBy(projects, formatPicker, true), getConfigColors("formats"));
+    renderHorizontalBarChart(document.getElementById("chartByNature"), countBy(projects, naturePicker, true), getConfigColors("natures"));
+    renderHorizontalBarChart(document.getElementById("chartByDuration"), countBy(projects, durationPicker, true), getConfigColors("durations"));
+    renderBarChart(document.getElementById("chartShortDocsSpent"), { "Short doc": shortDocSpentTotal }, "vertical", ["#64748b"], (value) => money(value));
+    renderAvgStageTable(document.getElementById("chartAvgStage"), avgMonthsByStage(projects));
+    renderMaioresInvestimentos(document.getElementById("maioresInvestimentos"), projects);
+  }
+
+  if (showRota) {
+    renderRouteDashboard();
+  }
+}
+
+function renderDashboardViewTabs() {
+  const container = document.getElementById("dashboardViewTabs");
+  if (!container) return;
+  const options = [
+    { value: "todos", label: "Todos" },
+    { value: "producoes", label: "Produções" },
+    { value: "rota", label: "Rota" }
+  ];
+  container.innerHTML = options
+    .map((o) => `<button class="dash-view-tab ${selectedDashboardView === o.value ? "active" : ""}" data-view="${o.value}">${o.label}</button>`)
+    .join("");
+  container.querySelectorAll(".dash-view-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedDashboardView = btn.dataset.view;
+      renderDashboard();
+    });
+  });
+}
+
+function renderRouteDashboard() {
+  const allRouteItems = state.routes || [];
+  const routeProjects = getRouteSelectedProjects();
+  const totalEntries = allRouteItems.length;
+
+  // Funções de filtro por categoria
+  const isPremiado   = (s) => /premi/i.test(s);
+  const isNomeado    = (s) => /nomin|nomeado/i.test(s);
+  const isSelecionado = (s) => /selecio/i.test(s) && !/não\s*selecio|nao\s*selecio/i.test(s);
+
+  const countMatch = (test) => allRouteItems.filter((item) => test(String(item.status || ""))).length;
+  const premiados    = countMatch(isPremiado);
+  const nomeados     = countMatch(isNomeado);
+  const selecionados = countMatch(isSelecionado);
+
+  // Cards de resumo
+  const summaryEl = document.getElementById("routeSummaryCards");
+  if (summaryEl) {
+    summaryEl.innerHTML = [
+      cardHtml("Filmes na Rota", String(routeProjects.length), "projects"),
+      cardHtml("Total de Inscrições", String(totalEntries), "avg")
+    ].join("");
+  }
+
+  // Destaques / Premiações — clicáveis
+  const highlightsEl = document.getElementById("routeHighlights");
+  if (highlightsEl) {
+    highlightsEl.innerHTML = `
+      <div class="route-highlight-item route-highlight-gold" role="button" tabindex="0" data-highlight="premiados">
+        <span class="route-highlight-number">${premiados}</span>
+        <span class="route-highlight-label">Prêmios</span>
+      </div>
+      <div class="route-highlight-item route-highlight-purple" role="button" tabindex="0" data-highlight="nomeados">
+        <span class="route-highlight-number">${nomeados}</span>
+        <span class="route-highlight-label">Nomeações</span>
+      </div>
+      <div class="route-highlight-item route-highlight-blue" role="button" tabindex="0" data-highlight="selecionados">
+        <span class="route-highlight-number">${selecionados}</span>
+        <span class="route-highlight-label">Seleções</span>
+      </div>
+    `;
+    highlightsEl.querySelectorAll("[data-highlight]").forEach((el) => {
+      el.addEventListener("click", () => {
+        const type = el.dataset.highlight;
+        const filterFn = type === "premiados" ? isPremiado : type === "nomeados" ? isNomeado : isSelecionado;
+        const label = type === "premiados" ? "Prêmios" : type === "nomeados" ? "Nomeações" : "Seleções";
+        const matching = allRouteItems.filter((item) => filterFn(String(item.status || "")));
+        openRouteInfoByCategory(label, matching);
+      });
+    });
+  }
+
+  // Gráfico por status
+  const statusMap = countBy(allRouteItems, (item) => String(item.status || "").trim(), true);
+  renderBarChart(document.getElementById("chartRouteByStatus"), statusMap, "vertical",
+    ["#10b981", "#3b82f6", "#f59e0b", "#f97316", "#8b5cf6", "#94a3b8"]);
+
+  // Top 5 Destaques (premiados + nomeados + selecionados)
+  const isDestaque = (s) => isPremiado(s) || isNomeado(s) || isSelecionado(s);
+  renderRouteTop5(allRouteItems, isDestaque);
+}
+
+function renderRouteTop5(allRouteItems, filterFn) {
+  const container = document.getElementById("routeTop5");
+  if (!container) return;
+
+  const premiItems = allRouteItems.filter((item) => filterFn(String(item.status || "")));
+  if (!premiItems.length) {
+    container.innerHTML = '<p class="empty" style="font-size:0.85rem;color:var(--muted)">Nenhum destaque registrado.</p>';
+    return;
+  }
+
+  // Contar por projeto
+  const countByProject = {};
+  premiItems.forEach((item) => {
+    countByProject[item.projectId] = (countByProject[item.projectId] || 0) + 1;
+  });
+
+  const top5 = Object.entries(countByProject)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 5)
+    .map(([projectId, count]) => {
+      const project = state.projects.find((p) => p.id === projectId);
+      return { projectId, project, count };
+    });
+
+  const maxCount = top5[0]?.count || 1;
+
+  container.innerHTML = top5
+    .map(({ projectId, project, count }) => {
+      const label = project ? (project.title || "Projeto") : "Projeto desconhecido";
+      const pct = Math.round((count / maxCount) * 100);
+      return `<div class="route-top5-item" data-project-id="${escapeHtml(projectId)}" role="button" tabindex="0">
+        <div class="route-top5-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+        <div class="route-top5-bar-wrap">
+          <div class="route-top5-bar" style="width:${pct}%"></div>
+          <span class="route-top5-count">${count} destaque${count !== 1 ? "s" : ""}</span>
+        </div>
+      </div>`;
+    })
+    .join("");
+
+  container.querySelectorAll(".route-top5-item").forEach((el) => {
+    el.addEventListener("click", () => {
+      const projectId = el.dataset.projectId;
+      const project = state.projects.find((p) => p.id === projectId);
+      const title = project ? `${project.title || "Projeto"}${project.code ? " — #" + project.code : ""}` : "Premiações";
+      const items = allRouteItems.filter((r) => r.projectId === projectId && filterFn(String(r.status || "")));
+      openRouteInfoByFilm(title, items);
+    });
+  });
+}
+
+function openRouteInfoByCategory(label, items) {
+  // Agrupa por projeto
+  const byProject = {};
+  items.forEach((item) => {
+    if (!byProject[item.projectId]) byProject[item.projectId] = [];
+    byProject[item.projectId].push(item);
+  });
+
+  const bodyHtml = Object.entries(byProject).length
+    ? Object.entries(byProject).map(([projectId, projectItems]) => {
+        const project = state.projects.find((p) => p.id === projectId);
+        const filmName = project
+          ? `${escapeHtml(project.title || "Projeto")} <span class="route-info-sku">${project.code ? "#" + project.code : ""}</span>`
+          : "Projeto desconhecido";
+        const listItems = projectItems
+          .map((item) => `<li>${escapeHtml(item.name || "—")}${item.status ? ` <span class="route-info-sku">${escapeHtml(item.status)}</span>` : ""}</li>`)
+          .join("");
+        return `<div class="route-info-group"><strong>${filmName}</strong><ul>${listItems}</ul></div>`;
+      }).join("")
+    : "<p style='color:var(--muted);font-size:0.9rem'>Nenhum item encontrado.</p>";
+
+  showRouteInfoModal(label, bodyHtml);
+}
+
+function openRouteInfoByFilm(title, items) {
+  const bodyHtml = items.length
+    ? `<ul style="padding-left:18px;margin:0">${items.map((item) =>
+        `<li style="padding:3px 0;font-size:0.87rem">${escapeHtml(item.name || "—")}${item.status ? ` <span class="route-info-sku">${escapeHtml(item.status)}</span>` : ""}</li>`
+      ).join("")}</ul>`
+    : "<p style='color:var(--muted);font-size:0.9rem'>Nenhuma premiação encontrada.</p>";
+
+  showRouteInfoModal(title, bodyHtml);
+}
+
+function showRouteInfoModal(title, bodyHtml) {
+  const dialog = document.getElementById("routeInfoDialog");
+  if (!dialog) return;
+  document.getElementById("routeInfoTitle").textContent = title;
+  document.getElementById("routeInfoBody").innerHTML = bodyHtml;
+
+  // Garantir que o botão de fechar funcione (re-bind)
+  const closeBtn = document.getElementById("btnCloseRouteInfo");
+  if (closeBtn) closeBtn.onclick = () => dialog.close();
+
+  // Fechar ao clicar no backdrop
+  dialog.onclick = (e) => {
+    if (e.target === dialog) dialog.close();
+  };
+
+  dialog.showModal();
 }
 
 function renderDashboardYearChips() {
@@ -1925,7 +2150,6 @@ function filteredDashboardProjects() {
     if (!matchesMultiFilter(getNormalizedProjectField(p, "format", { strict: true }), selectedDashboardFilters.formats)) return false;
     if (!matchesMultiFilter(getNormalizedProjectField(p, "nature", { strict: true }), selectedDashboardFilters.natures)) return false;
     if (!matchesMultiFilter(getNormalizedProjectField(p, "duration", { strict: true }), selectedDashboardFilters.durations)) return false;
-    if (!matchesMultiFilter(getProjectInfantilValue(p), selectedDashboardFilters.infantis)) return false;
     if (!matchesProjectFlagFilters(p, selectedDashboardFilters.flags)) return false;
     if (!matchesMultiFilter(getProjectDistributions(p), selectedDashboardFilters.distributions)) return false;
     if (!matchesProjectFilter(p.id, selectedDashboardFilters.projects)) return false;
@@ -1944,15 +2168,13 @@ function renderDashboardExtraFilters() {
   const natureValues = uniq(state.settings.natures).filter(Boolean);
   const durationValues = uniq(state.settings.durations).filter(Boolean);
   const distributionValues = uniq([...(state.settings.distributions || []), ...state.projects.flatMap((p) => getProjectDistributions(p))]).filter(Boolean);
-  const infantilValues = ["Sim", "Não"];
   sanitizeFilterSet(selectedDashboardFilters.statuses, statusValues);
   sanitizeFilterSet(selectedDashboardFilters.categories, categoryValues);
   sanitizeFilterSet(selectedDashboardFilters.formats, formatValues);
   sanitizeFilterSet(selectedDashboardFilters.natures, natureValues);
   sanitizeFilterSet(selectedDashboardFilters.durations, durationValues);
-  sanitizeFilterSet(selectedDashboardFilters.infantis, infantilValues);
   sanitizeFilterSet(selectedDashboardFilters.distributions, distributionValues);
-  sanitizeFilterSet(selectedDashboardFilters.flags, PROJECT_FLAG_FIELDS.map((field) => field.key));
+  sanitizeFilterSet(selectedDashboardFilters.flags, PROJECT_RECORD_FILTER_FIELDS.map((field) => field.key));
 
   renderDashboardFilterChips(
     document.getElementById("dashboardStatusChips"),
@@ -1983,12 +2205,6 @@ function renderDashboardExtraFilters() {
     durationValues,
     selectedDashboardFilters.durations,
     "durations"
-  );
-  renderDashboardFilterChips(
-    document.getElementById("dashboardInfantilChips"),
-    infantilValues,
-    selectedDashboardFilters.infantis,
-    "infantis"
   );
   renderProjectFlagFilterChips(
     document.getElementById("dashboardFlagChips"),
@@ -2032,7 +2248,7 @@ function renderProjectFlagFilterChips(container, selectedSet, onChange = renderD
   const allActive = selectedSet.size === 0;
   container.innerHTML = [
     `<button class="chip ${allActive ? "active" : ""}" data-flag-filter="__all">Todos</button>`,
-    ...PROJECT_FLAG_FIELDS.map(
+    ...PROJECT_RECORD_FILTER_FIELDS.map(
       (field) => `<button class="chip ${selectedSet.has(field.key) ? "active" : ""}" data-flag-filter="${field.key}">${escapeHtml(field.label)}</button>`
     )
   ].join("");
@@ -2306,11 +2522,56 @@ function getProjectDistributions(project) {
 }
 
 function getProjectInfantilValue(project) {
+  if (project?.infantil === true) return "Sim";
   const raw = String(project?.infantilContent || project?.contentInfantil || "").trim().toLowerCase();
   if (raw === "sim") return "Sim";
-  if (raw === "nao" || raw === "não") return "Não";
-  if (project?.infantil === true) return "Sim";
   return "";
+}
+
+function isShortDocProject(project) {
+  const code = String(project?.code || "").trim();
+  if (/^03-/.test(code)) return true;
+  return normalizeSearchText(getProjectField(project, "nature")) === normalizeSearchText(FIXED_NATURE_LABEL);
+}
+
+function getDashboardSpentCollections(projects = []) {
+  const regularSpent = [];
+  const shortDocSpent = [];
+  (Array.isArray(projects) ? projects : []).forEach((project) => {
+    const value = getProjectSpentValue(project);
+    if (value === null) return;
+    const production = hasNumericValue(project?.spentProduction) ? Number(project.spentProduction) : value;
+    const team = hasNumericValue(project?.spentTeam) ? Number(project.spentTeam) : 0;
+    if (isShortDocProject(project)) shortDocSpent.push({ p: project, value, production, team });
+    else regularSpent.push({ p: project, value, production, team });
+  });
+  return { regularSpent, shortDocSpent };
+}
+
+function formatStatusTitleCase(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw === raw.toUpperCase()) {
+    const normalized = raw.toLowerCase();
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  }
+  return raw;
+}
+
+function ensureFixedNature(items = []) {
+  const normalized = uniq((Array.isArray(items) ? items : []).map((item) => String(item || "").trim()).filter(Boolean));
+  if (!normalized.some((item) => normalizeSearchText(item) === normalizeSearchText(FIXED_NATURE_LABEL))) {
+    normalized.push(FIXED_NATURE_LABEL);
+  }
+  return normalized;
+}
+
+const PROTECTED_ROUTE_STATUSES = new Set(["SELECIONADO", "NOMEADO", "PREMIADO", "NÃO SELECIONADO"]);
+
+function isProtectedConfigItem(key, label) {
+  if (key === "routeStatuses") return PROTECTED_ROUTE_STATUSES.has(String(label || "").trim().toUpperCase());
+  if (key !== "natures") return false;
+  return normalizeSearchText(label) === normalizeSearchText(FIXED_NATURE_LABEL);
 }
 
 function getRouteItemsForProject(projectId) {
@@ -2483,7 +2744,8 @@ function routeInlineSelect(field, itemId, currentValue, options) {
   const colorKey = field === "status" ? "routeStatuses" : field === "exclusivity" ? "routeExclusivities" : "";
   const hexColor = colorKey ? getConfigItemColor(colorKey, currentValue, 0, true) : "";
   const inlineStyle = hexColor ? ` style="background:${hexToRgba(hexColor, 0.16)};border-color:${hexToRgba(hexColor, 0.45)};color:${hexColor}"` : "";
-  return `<select class="cell-inline-select" data-route-inline="select" data-field="${field}" data-id="${itemId}"${inlineStyle}>
+  const cls = `isel${!currentValue || !hexColor ? " isel-nil" : ""}`;
+  return `<select class="${cls}" data-route-inline="select" data-field="${field}" data-id="${itemId}"${inlineStyle}>
     ${["", ...options.filter(Boolean)]
       .map((value) => {
         const label = field === "status" ? formatRouteStatusLabel(value) : value || "—";
@@ -2766,6 +3028,12 @@ function renderGantt() {
     const stages = Array.isArray(project?.stages) ? project.stages : [];
     stages.forEach((st) => {
       if (!st || !isValidStagePeriod(st.start) || !isValidStagePeriod(st.end)) return;
+      // Filtro de etapas: se há etapas selecionadas, ocultar as não selecionadas
+      if (selectedGanttFilters.stages.size > 0) {
+        const stageDef = state.settings.stages.find((s) => s.id === st.stageId);
+        const stageName = stageDef?.name || st.name || "";
+        if (!selectedGanttFilters.stages.has(stageName)) return;
+      }
       const startIndex = stagePeriodToHalfIndex(st.start, "start");
       const endIndex = stagePeriodToHalfIndex(st.end, "end");
       if (!Number.isFinite(startIndex) || !Number.isFinite(endIndex)) return;
@@ -2980,21 +3248,28 @@ function renderGanttExtraFilters() {
   const natureValues = uniq([...(state.settings?.natures || []), ...state.projects.map((p) => getProjectField(p, "nature"))]).filter(Boolean);
   const durationValues = uniq([...(state.settings?.durations || []), ...state.projects.map((p) => getProjectField(p, "duration"))]).filter(Boolean);
   const distributionValues = uniq([...(state.settings?.distributions || []), ...state.projects.flatMap((p) => getProjectDistributions(p))]).filter(Boolean);
-  const infantilValues = ["Sim", "Não"];
+  const stageValues = (state.settings?.stages || []).map((s) => s.name).filter(Boolean);
+  sanitizeFilterSet(selectedGanttFilters.stages, stageValues);
   sanitizeFilterSet(selectedGanttFilters.statuses, statusValues);
   sanitizeFilterSet(selectedGanttFilters.categories, categoryValues);
   sanitizeFilterSet(selectedGanttFilters.formats, formatValues);
   sanitizeFilterSet(selectedGanttFilters.natures, natureValues);
   sanitizeFilterSet(selectedGanttFilters.durations, durationValues);
-  sanitizeFilterSet(selectedGanttFilters.infantis, infantilValues);
   sanitizeFilterSet(selectedGanttFilters.distributions, distributionValues);
-  sanitizeFilterSet(selectedGanttFilters.flags, PROJECT_FLAG_FIELDS.map((field) => field.key));
+  sanitizeFilterSet(selectedGanttFilters.flags, PROJECT_RECORD_FILTER_FIELDS.map((field) => field.key));
 
   renderDashboardFilterChips(
     document.getElementById("ganttStatusChips"),
     statusValues,
     selectedGanttFilters.statuses,
     "statuses",
+    () => renderGantt()
+  );
+  renderDashboardFilterChips(
+    document.getElementById("ganttStageChips"),
+    stageValues,
+    selectedGanttFilters.stages,
+    "stages",
     () => renderGantt()
   );
   renderDashboardFilterChips(
@@ -3025,13 +3300,6 @@ function renderGanttExtraFilters() {
     "durations",
     () => renderGantt()
   );
-  renderDashboardFilterChips(
-    document.getElementById("ganttInfantilChips"),
-    infantilValues,
-    selectedGanttFilters.infantis,
-    "infantis",
-    () => renderGantt()
-  );
   renderProjectFlagFilterChips(
     document.getElementById("ganttFlagChips"),
     selectedGanttFilters.flags,
@@ -3055,7 +3323,6 @@ function filteredGanttProjects() {
     if (!matchesMultiFilter(getProjectField(p, "format"), selectedGanttFilters.formats)) return false;
     if (!matchesMultiFilter(getProjectField(p, "nature"), selectedGanttFilters.natures)) return false;
     if (!matchesMultiFilter(getProjectField(p, "duration"), selectedGanttFilters.durations)) return false;
-    if (!matchesMultiFilter(getProjectInfantilValue(p), selectedGanttFilters.infantis)) return false;
     if (!matchesProjectFlagFilters(p, selectedGanttFilters.flags)) return false;
     if (!matchesMultiFilter(getProjectDistributions(p), selectedGanttFilters.distributions)) return false;
     if (!matchesProjectFilter(p.id, selectedGanttFilters.projects)) return false;
@@ -3343,15 +3610,13 @@ function renderProjectsTools() {
   const projectNatureValues = uniq([...state.settings.natures, ...state.projects.map((p) => getProjectField(p, "nature"))]).filter(Boolean);
   const projectDurationValues = uniq([...state.settings.durations, ...state.projects.map((p) => getProjectField(p, "duration"))]).filter(Boolean);
   const projectDistributionValues = uniq([...(state.settings.distributions || []), ...state.projects.flatMap((p) => getProjectDistributions(p))]).filter(Boolean);
-  const projectInfantilValues = ["Sim", "Não"];
   sanitizeFilterSet(selectedProjectFilters.statuses, projectStatusValues);
   sanitizeFilterSet(selectedProjectFilters.categories, projectCategoryValues);
   sanitizeFilterSet(selectedProjectFilters.formats, projectFormatValues);
   sanitizeFilterSet(selectedProjectFilters.natures, projectNatureValues);
   sanitizeFilterSet(selectedProjectFilters.durations, projectDurationValues);
-  sanitizeFilterSet(selectedProjectFilters.infantis, projectInfantilValues);
   sanitizeFilterSet(selectedProjectFilters.distributions, projectDistributionValues);
-  sanitizeFilterSet(selectedProjectFilters.flags, PROJECT_FLAG_FIELDS.map((field) => field.key));
+  sanitizeFilterSet(selectedProjectFilters.flags, PROJECT_RECORD_FILTER_FIELDS.map((field) => field.key));
 
   const years = [...new Set(state.projects.map((p) => getProjectYear(p)).filter((y) => y > 0))].sort((a, b) => a - b);
   const allActive = selectedProjectYears.size === 0;
@@ -3414,16 +3679,6 @@ function renderProjectsTools() {
     }
   );
   renderDashboardFilterChips(
-    document.getElementById("projectInfantilChips"),
-    projectInfantilValues,
-    selectedProjectFilters.infantis,
-    "infantis",
-    () => {
-      renderProjectsTools();
-      renderProjectsTable();
-    }
-  );
-  renderDashboardFilterChips(
     document.getElementById("projectDurationChips"),
     projectDurationValues,
     selectedProjectFilters.durations,
@@ -3470,7 +3725,6 @@ function renderProjectsTable() {
     if (!matchesMultiFilter(getProjectField(p, "format"), selectedProjectFilters.formats)) return false;
     if (!matchesMultiFilter(getProjectField(p, "nature"), selectedProjectFilters.natures)) return false;
     if (!matchesMultiFilter(getProjectField(p, "duration"), selectedProjectFilters.durations)) return false;
-    if (!matchesMultiFilter(getProjectInfantilValue(p), selectedProjectFilters.infantis)) return false;
     if (!matchesProjectFlagFilters(p, selectedProjectFilters.flags)) return false;
     if (!matchesMultiFilter(getProjectDistributions(p), selectedProjectFilters.distributions)) return false;
     if (!matchesProjectFilter(p.id, selectedProjectFilters.projects)) return false;
@@ -3489,7 +3743,7 @@ function renderProjectsTable() {
   const durations = uniq(state.settings.durations).filter(Boolean);
   const statuses = uniq(state.settings.statuses).filter(Boolean);
   const renderFlagCell = (project, fieldKey) => {
-    const checked = Boolean(project[fieldKey]);
+    const checked = fieldKey === "infantil" ? getProjectInfantilValue(project) === "Sim" : Boolean(project[fieldKey]);
     if (!editable) {
       return `<label class="cell-inline-checkbox is-readonly"><input type="checkbox" ${checked ? "checked" : ""} disabled /><span></span></label>`;
     }
@@ -3517,18 +3771,20 @@ function renderProjectsTable() {
         <td>${editable ? inlineSelect("format", p.id, getProjectField(p, "format"), formats) : escapeHtml(getProjectField(p, "format") || "—")}</td>
         <td>${editable ? inlineSelect("nature", p.id, getProjectField(p, "nature"), natures) : escapeHtml(getProjectField(p, "nature") || "—")}</td>
         <td>${editable ? inlineSelect("duration", p.id, getProjectField(p, "duration"), durations) : escapeHtml(getProjectField(p, "duration") || "—")}</td>
-        <td>${editable ? inlineSelect("infantil", p.id, getProjectInfantilValue(p), ["Sim", "Não"]) : escapeHtml(getProjectInfantilValue(p) || "—")}</td>
+        <td>${renderFlagCell(p, "infantil")}</td>
         ${PROJECT_FLAG_FIELDS.map((field) => `<td>${renderFlagCell(p, field.key)}</td>`).join("")}
         <td>${editable ? inlineSelect("status", p.id, getProjectField(p, "status"), statuses, badgeClass) : escapeHtml(getProjectField(p, "status") || "—")}</td>
         <td>
           ${
             editable
-              ? `<button class="btn light icon-btn" data-action="edit" data-id="${p.id}" title="Editar projeto" aria-label="Editar projeto">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l9.06-9.06.92.92L5.92 19.58zM20.71 7.04a1 1 0 0 0 0-1.41L18.37 3.3a1 1 0 0 0-1.41 0l-1.54 1.54 3.75 3.75 1.54-1.55z"/></svg>
-          </button>
-          <button class="btn danger icon-btn" data-action="del" data-id="${p.id}" title="Excluir projeto" aria-label="Excluir projeto">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h5v2H3V5h5l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9zm-1 12h12a2 2 0 0 0 2-2V8H4v11a2 2 0 0 0 2 2z"/></svg>
-          </button>`
+              ? `<div class="act-group">
+            <button class="act-btn" data-action="edit" data-id="${p.id}" title="Editar projeto" aria-label="Editar projeto">
+              <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14" fill="currentColor"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l9.06-9.06.92.92L5.92 19.58zM20.71 7.04a1 1 0 0 0 0-1.41L18.37 3.3a1 1 0 0 0-1.41 0l-1.54 1.54 3.75 3.75 1.54-1.55z"/></svg>
+            </button>
+            <button class="act-btn danger" data-action="del" data-id="${p.id}" title="Excluir projeto" aria-label="Excluir projeto">
+              <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14" fill="currentColor"><path d="M9 3h6l1 2h5v2H3V5h5l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9zm-1 12h12a2 2 0 0 0 2-2V8H4v11a2 2 0 0 0 2 2z"/></svg>
+            </button>
+          </div>`
               : '<span style="color:#94a3b8">—</span>'
           }
         </td>
@@ -3559,8 +3815,9 @@ function renderProjectsTable() {
     el.addEventListener("change", () => {
       const project = state.projects.find((p) => p.id === el.dataset.id);
       const field = String(el.dataset.flag || "").trim();
-      if (!project || !PROJECT_FLAG_FIELDS.some((item) => item.key === field)) return;
+      if (!project || !PROJECT_RECORD_FILTER_FIELDS.some((item) => item.key === field)) return;
       project[field] = Boolean(el.checked);
+      if (field === "infantil") project.infantilContent = project[field] ? "Sim" : "";
       saveState();
       renderProjectsTable();
       renderDashboard();
@@ -3574,7 +3831,7 @@ function renderProjectsTable() {
       state.projects = state.projects.filter((p) => p.id !== btn.dataset.id);
       state.routeProjects = normalizeRouteProjectIds((state.routeProjects || []).filter((projectId) => projectId !== btn.dataset.id));
       state.routes = (state.routes || []).filter((item) => item.projectId !== btn.dataset.id);
-      collapsedRouteProjects.delete(btn.dataset.id);
+      expandedRouteProjects.delete(btn.dataset.id);
       saveState();
       renderAll();
     });
@@ -3592,7 +3849,7 @@ function renderRoute() {
   if (filtersPanel) filtersPanel.hidden = !routeFiltersOpen;
   setFilterToggleButton(filterButton, routeFiltersOpen);
 
-  const editable = canEditContent();
+  const editable = canEditRoute();
   const query = normalizeSearchText(routeSearchQuery);
   const projects = getRouteSelectedProjects();
   const routeStatuses = uniq(state.settings.routeStatuses || []).filter(Boolean);
@@ -3604,26 +3861,31 @@ function renderRoute() {
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b, "pt-BR"))
   );
-  const routeResultYears = uniq(
-    allRouteItems
-      .map((item) => getRouteResultYear(item))
-      .filter(Boolean)
-      .sort((a, b) => Number(b) - Number(a))
-  );
-
   sanitizeFilterSet(selectedRouteFilters.statuses, routeStatuses);
   sanitizeFilterSet(selectedRouteFilters.countries, routeCountries);
-  sanitizeFilterSet(selectedRouteFilters.resultYears, routeResultYears);
   sanitizeFilterSet(selectedRouteFilters.exclusivities, routeExclusivities);
 
   renderDashboardFilterChips(document.getElementById("routeStatusChips"), routeStatuses, selectedRouteFilters.statuses, "route-statuses", renderRoute);
   renderValuePickerFilter(document.getElementById("routeCountryFilter"), routeCountries, selectedRouteFilters.countries, "routeCountries", renderRoute, "Buscar país...");
-  renderDashboardFilterChips(document.getElementById("routeResultYearChips"), routeResultYears, selectedRouteFilters.resultYears, "route-result-years", renderRoute);
   renderDashboardFilterChips(document.getElementById("routeExclusivityChips"), routeExclusivities, selectedRouteFilters.exclusivities, "route-exclusivities", renderRoute);
 
-  summary.innerHTML = editable
-    ? '<button id="btnAddRouteProject" class="btn accent" type="button">+ Adicionar Filme</button>'
-    : "";
+  const allExpanded = projects.length > 0 && projects.every((p) => expandedRouteProjects.has(p.id));
+  summary.innerHTML = `
+    <button id="btnToggleAllRoute" class="btn light" type="button" title="${allExpanded ? "Recolher todos" : "Expandir todos"}">
+      ${allExpanded
+        ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="margin-right:4px"><path d="M7 14l5-5 5 5H7z"/></svg>Recolher`
+        : `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="margin-right:4px"><path d="M7 10l5 5 5-5H7z"/></svg>Expandir`}
+    </button>
+    ${editable ? '<button id="btnAddRouteProject" class="btn accent" type="button">+ Adicionar Filme</button>' : ""}
+  `;
+  document.getElementById("btnToggleAllRoute")?.addEventListener("click", () => {
+    if (allExpanded) {
+      projects.forEach((p) => expandedRouteProjects.delete(p.id));
+    } else {
+      projects.forEach((p) => expandedRouteProjects.add(p.id));
+    }
+    renderRoute();
+  });
   document.getElementById("btnAddRouteProject")?.addEventListener("click", () => openRouteProjectDialog());
 
   const visibleProjects = projects
@@ -3632,12 +3894,10 @@ function renderRoute() {
       const hasRouteFilters =
         selectedRouteFilters.statuses.size > 0 ||
         selectedRouteFilters.countries.size > 0 ||
-        selectedRouteFilters.resultYears.size > 0 ||
         selectedRouteFilters.exclusivities.size > 0;
       const projectItems = getRouteItemsForProject(project.id).filter((item) => {
         if (!matchesMultiFilter(String(item.status || "").trim(), selectedRouteFilters.statuses)) return false;
         if (!matchesMultiFilter(String(item.country || "").trim(), selectedRouteFilters.countries)) return false;
-        if (!matchesMultiFilter(getRouteResultYear(item), selectedRouteFilters.resultYears)) return false;
         if (!matchesMultiFilter(String(item.exclusivity || "").trim(), selectedRouteFilters.exclusivities)) return false;
         if (!query) return true;
         return projectHit || routeItemMatchesQuery(item, query);
@@ -3662,7 +3922,7 @@ function renderRoute() {
   body.innerHTML = visibleProjects
     .map(({ project, items: projectItems }) => {
       const count = projectItems.length;
-      const collapsed = collapsedRouteProjects.has(project.id);
+      const collapsed = !expandedRouteProjects.has(project.id);
 
       const projectRow = `<tr class="route-project-row">
         <td>
@@ -3707,7 +3967,14 @@ function renderRoute() {
           <td>
             <div class="route-item-title-wrap">
               <span class="route-item-indent"></span>
-              <span class="route-item-title">${escapeHtml(item.name || "")}</span>
+              ${item.type === "PRÊMIO"
+                ? `<svg class="route-type-icon route-type-icon-premio" viewBox="0 0 20 20" aria-label="Prêmio"><path d="M10 2l1.8 3.6 4 .6-2.9 2.8.7 4L10 11l-3.6 1.9.7-4L4.2 6.2l4-.6L10 2z" fill="currentColor"/></svg>`
+                : `<svg class="route-type-icon route-type-icon-festival" viewBox="0 0 20 20" aria-label="Festival"><rect x="2" y="5" width="16" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 5V4a1 1 0 0 1 2 0v1M12 5V4a1 1 0 0 1 2 0v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 9h16" stroke="currentColor" stroke-width="1.5"/></svg>`
+              }
+              ${editable
+                ? `<span class="route-item-title route-item-title-link" role="button" tabindex="0" data-route-action="edit" data-id="${item.id}">${escapeHtml(item.name || "")}</span>`
+                : `<span class="route-item-title">${escapeHtml(item.name || "")}</span>`
+              }
             </div>
           </td>
           <td>${editable ? routeInlineSelect("status", item.id, item.status, routeStatuses) : renderRouteStatusBadge(item.status)}</td>
@@ -3737,8 +4004,8 @@ function renderRoute() {
     btn.addEventListener("click", () => {
       const projectId = btn.dataset.projectId;
       if (!projectId) return;
-      if (collapsedRouteProjects.has(projectId)) collapsedRouteProjects.delete(projectId);
-      else collapsedRouteProjects.add(projectId);
+      if (expandedRouteProjects.has(projectId)) expandedRouteProjects.delete(projectId);
+      else expandedRouteProjects.add(projectId);
       renderRoute();
     });
   });
@@ -3751,7 +4018,7 @@ function renderRoute() {
         if (!confirm("Remover este filme da Rota? Os festivais e prêmios vinculados também serão excluídos.")) return;
         state.routeProjects = normalizeRouteProjectIds((state.routeProjects || []).filter((id) => id !== projectId));
         state.routes = (state.routes || []).filter((item) => item.projectId !== projectId);
-        collapsedRouteProjects.delete(projectId);
+        expandedRouteProjects.delete(projectId);
         saveState();
         renderRoute();
       });
@@ -3761,6 +4028,7 @@ function renderRoute() {
     });
     body.querySelectorAll("[data-route-action='edit']").forEach((btn) => {
       btn.addEventListener("click", () => openRouteItemDialog(btn.dataset.id));
+      btn.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRouteItemDialog(btn.dataset.id); } });
     });
     body.querySelectorAll("[data-route-action='del']").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -3814,19 +4082,22 @@ function renderUsers() {
 
   body.innerHTML = users
     .map((user) => {
+      const isInactive = user.active === false;
       const invitedAt = user.invitedAt ? formatDatePtBr(user.invitedAt) : "";
       const inviteText = invitedAt ? `Convidado em ${invitedAt}` : "Sem convite";
       const passwordState = isRemoteSupabaseAuthEnabled()
-        ? "Senha"
+        ? user.firstAccessPending
+          ? "Provisória"
+          : "Definida"
         : user.firstAccessPending
           ? "Primeiro acesso"
           : user.passwordHash
             ? "Definida"
             : "Pendente";
-      return `<tr>
-        <td>${escapeHtml(user.name || "")}</td>
+      return `<tr${isInactive ? ' style="opacity:0.5"' : ''}>
+        <td>${escapeHtml(user.name || "")}${isInactive ? ' <span style="font-size:0.75em;color:#94a3b8;font-weight:500">(inativo)</span>' : ""}</td>
         <td>${escapeHtml(user.email || "")}</td>
-        <td><span class="badge blue">${escapeHtml(user.role || "LEITOR")}</span></td>
+        <td><span class="badge ${isInactive ? "grey" : "blue"}">${escapeHtml(user.role || "LEITOR")}</span></td>
         <td>${escapeHtml(passwordState)}</td>
         <td>${escapeHtml(inviteText)}</td>
         <td>
@@ -3891,7 +4162,6 @@ function commitProjectInlineSelect(el) {
     format: "format",
     nature: "nature",
     duration: "duration",
-    infantil: "infantilContent",
     status: "status"
   };
   const projectField = fieldMap[field];
@@ -3936,40 +4206,109 @@ function openUserDialog(userId = null) {
   const user = state.users.find(
     (item) => String(item.id || "").trim() === userId || normalizeUserEmail(item.email) === normalizedUserId
   );
+  const isNewUser = !user;
+  const isOwnProfile = Boolean(user && current && normalizeUserEmail(current.email) === normalizeUserEmail(user.email));
+
   document.getElementById("userDialogTitle").textContent = user ? (isAdmin ? "Editar Usuário" : "Editar Perfil") : "Cadastrar Usuário";
   document.getElementById("userId").value = user?.id || user?.email || uid();
   document.getElementById("userName").value = user?.name || "";
   const userEmailInput = document.getElementById("userEmail");
   userEmailInput.value = user?.email || "";
   userEmailInput.readOnly = Boolean(isRemoteSupabaseAuthEnabled() && user);
+
   const roleSelect = document.getElementById("userRole");
   roleSelect.value = user?.role || "LEITOR";
   roleSelect.disabled = !isAdmin;
   const roleLabel = roleSelect.closest("label");
   if (roleLabel) roleLabel.hidden = !isAdmin;
-  const passwordLabel = document.getElementById("userPassword").closest("label");
-  const passwordConfirmLabel = document.getElementById("userPasswordConfirm").closest("label");
-  document.getElementById("userPassword").value = "";
-  document.getElementById("userPasswordConfirm").value = "";
-  const passwordHint = document.getElementById("userPasswordHint");
+
+  const pwdInput = document.getElementById("userPassword");
+  const pwdConfirmInput = document.getElementById("userPasswordConfirm");
+  const pwdFields = document.getElementById("userPasswordFields");
+  const toggleRow = document.getElementById("userSetPasswordRow");
+  const toggleChk = document.getElementById("userSetPassword");
+  const pwdHint = document.getElementById("userPasswordHint");
+  const pwdLabelText = document.getElementById("userPasswordLabelText");
+  const pwdConfirmLabelText = document.getElementById("userPasswordConfirmLabelText");
+
+  // Limpar campos
+  pwdInput.value = "";
+  pwdConfirmInput.value = "";
+
   if (isRemoteSupabaseAuthEnabled()) {
-    const isOwnProfile = Boolean(user && current && normalizeUserEmail(current.email) === normalizeUserEmail(user.email));
-    if (passwordLabel) passwordLabel.hidden = !isOwnProfile;
-    if (passwordConfirmLabel) passwordConfirmLabel.hidden = !isOwnProfile;
-    if (passwordHint) {
-      passwordHint.hidden = false;
-      passwordHint.textContent = isOwnProfile
-        ? "Preencha os campos de acesso apenas se quiser alterar sua senha."
-        : 'O usuário definirá a própria senha no botão "Primeiro acesso".';
+    if (isNewUser && isAdmin) {
+      // Novo usuário: mostrar toggle "Definir senha provisória"
+      if (toggleRow) toggleRow.hidden = false;
+      if (toggleChk) {
+        toggleChk.checked = false;
+        toggleChk.onchange = () => {
+          const show = toggleChk.checked;
+          if (pwdFields) pwdFields.hidden = !show;
+          pwdInput.disabled = !show;
+          pwdConfirmInput.disabled = !show;
+          if (!show) { pwdInput.value = ""; pwdConfirmInput.value = ""; }
+          // Converter para type="password" apenas quando visível
+          pwdInput.type = show ? "password" : "text";
+          pwdConfirmInput.type = show ? "password" : "text";
+        };
+      }
+      if (pwdFields) pwdFields.hidden = true;
+      pwdInput.disabled = true;
+      pwdConfirmInput.disabled = true;
+      if (pwdLabelText) pwdLabelText.textContent = "Senha provisória";
+      if (pwdConfirmLabelText) pwdConfirmLabelText.textContent = "Confirmar senha provisória";
+      if (pwdHint) pwdHint.textContent = "Defina uma senha provisória para o novo usuário. No primeiro login ele será obrigado a criar uma nova senha.";
+    } else if (isOwnProfile) {
+      // Próprio perfil: sempre mostra campos de senha
+      if (toggleRow) toggleRow.hidden = true;
+      if (pwdFields) pwdFields.hidden = false;
+      pwdInput.disabled = false;
+      pwdConfirmInput.disabled = false;
+      pwdInput.type = "password";
+      pwdConfirmInput.type = "password";
+      if (pwdLabelText) pwdLabelText.textContent = "Nova senha";
+      if (pwdConfirmLabelText) pwdConfirmLabelText.textContent = "Confirmar nova senha";
+      if (pwdHint) pwdHint.textContent = "Deixe em branco para manter a senha atual.";
+    } else if (isAdmin && user) {
+      // Admin editando outro usuário existente: toggle para redefinir senha
+      if (toggleRow) toggleRow.hidden = false;
+      if (toggleChk) {
+        toggleChk.checked = false;
+        toggleChk.onchange = () => {
+          const show = toggleChk.checked;
+          if (pwdFields) pwdFields.hidden = !show;
+          pwdInput.disabled = !show;
+          pwdConfirmInput.disabled = !show;
+          if (!show) { pwdInput.value = ""; pwdConfirmInput.value = ""; }
+          pwdInput.type = show ? "password" : "text";
+          pwdConfirmInput.type = show ? "password" : "text";
+        };
+      }
+      if (pwdFields) pwdFields.hidden = true;
+      pwdInput.disabled = true;
+      pwdConfirmInput.disabled = true;
+      if (pwdLabelText) pwdLabelText.textContent = "Nova senha provisória";
+      if (pwdConfirmLabelText) pwdConfirmLabelText.textContent = "Confirmar nova senha provisória";
+      if (pwdHint) pwdHint.textContent = "Se preencher, o usuário será obrigado a trocar a senha no próximo acesso.";
+    } else {
+      if (toggleRow) toggleRow.hidden = true;
+      if (pwdFields) pwdFields.hidden = true;
+      pwdInput.disabled = true;
+      pwdConfirmInput.disabled = true;
     }
   } else {
-    if (passwordLabel) passwordLabel.hidden = false;
-    if (passwordConfirmLabel) passwordConfirmLabel.hidden = false;
-    if (passwordHint) {
-      passwordHint.hidden = !user;
-      passwordHint.textContent = "Deixe os campos de senha em branco para manter a senha atual.";
-    }
+    // Modo local (sem Supabase)
+    if (toggleRow) toggleRow.hidden = true;
+    if (pwdFields) pwdFields.hidden = false;
+    pwdInput.disabled = false;
+    pwdConfirmInput.disabled = false;
+    pwdInput.type = "password";
+    pwdConfirmInput.type = "password";
+    if (pwdLabelText) pwdLabelText.textContent = "Senha";
+    if (pwdConfirmLabelText) pwdConfirmLabelText.textContent = "Confirmar senha";
+    if (pwdHint) pwdHint.textContent = "Deixe em branco para manter a senha atual.";
   }
+
   dialog.showModal();
 }
 
@@ -3989,6 +4328,8 @@ function collectUserForm() {
   const role = document.getElementById("userRole").value;
   const password = document.getElementById("userPassword").value;
   const passwordConfirm = document.getElementById("userPasswordConfirm").value;
+  const isOwnProfile = Boolean(existing && current && normalizeUserEmail(current.email) === normalizeUserEmail(existing.email));
+  const isNewRemoteUser = isRemoteSupabaseAuthEnabled() && !existing;
   if (!name || !email) {
     alert("Preencha nome e e-mail.");
     return null;
@@ -4014,15 +4355,24 @@ function collectUserForm() {
       alert("Para trocar o e-mail, cadastre um novo usuário e desative/exclua o anterior.");
       return null;
     }
+    const toggleChk = document.getElementById("userSetPassword");
+    const usePassword = Boolean(toggleChk?.checked) || isOwnProfile;
+    // Novo usuário sem senha → modo convite por e-mail
+    const sendInvite = isNewRemoteUser && !usePassword;
+    const isAdminResettingAnotherUser = Boolean(isAdmin && existing && !isOwnProfile && password);
+    const firstAccessPending = isNewRemoteUser || isAdminResettingAnotherUser
+      ? true
+      : Boolean(existing?.firstAccessPending);
     return {
       id: existing?.id || email,
       name,
       email,
-      role: isAdmin ? (["ADMIN", "EDITOR", "LEITOR"].includes(role) ? role : "LEITOR") : String(existing?.role || current?.role || "LEITOR"),
+      role: isAdmin ? (["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(role) ? role : "LEITOR") : String(existing?.role || current?.role || "LEITOR"),
       active: true,
       invitedAt: existing?.invitedAt || new Date().toISOString(),
-      password: password || "",
-      firstAccessPending: existing ? Boolean(existing.firstAccessPending) : !Boolean(password)
+      password: usePassword ? (password || "") : "",
+      sendInvite,
+      firstAccessPending
     };
   }
   if ((!existing || !existing.passwordHash) && !password) {
@@ -4033,37 +4383,10 @@ function collectUserForm() {
     id,
     name,
     email,
-    role: isAdmin ? (["ADMIN", "EDITOR", "LEITOR"].includes(role) ? role : "LEITOR") : String(existing?.role || current?.role || "LEITOR"),
+    role: isAdmin ? (["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(role) ? role : "LEITOR") : String(existing?.role || current?.role || "LEITOR"),
     passwordHash: password ? hashPassword(password) : String(existing?.passwordHash || ""),
     invitedAt: existing?.invitedAt || new Date().toISOString().slice(0, 10),
     firstAccessPending: password ? false : Boolean(existing?.firstAccessPending)
-  };
-}
-
-function openInviteDialog() {
-  if (!canManageUsers()) {
-    alert("Apenas ADMIN pode gerir usuários.");
-    return;
-  }
-  document.getElementById("inviteEmail").value = "";
-  document.getElementById("inviteRole").value = "LEITOR";
-  document.getElementById("inviteDialog").showModal();
-}
-
-function collectInviteForm() {
-  const email = document.getElementById("inviteEmail").value.trim().toLowerCase();
-  const role = document.getElementById("inviteRole").value;
-  if (!email) {
-    alert("Preencha o e-mail.");
-    return null;
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    alert("E-mail inválido.");
-    return null;
-  }
-  return {
-    email,
-    role: ["ADMIN", "EDITOR", "LEITOR"].includes(role) ? role : "LEITOR"
   };
 }
 
@@ -4078,15 +4401,6 @@ function displayNameFromEmail(email) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-function buildUserInviteLink(email, role) {
-  const subject = encodeURIComponent("Convite de acesso - Originais Lumine");
-  const platformLink = getPlatformLink();
-  const body = encodeURIComponent(
-    `Você foi convidado para o sistema Originais Lumine.\n\nFunção: ${role}\nE-mail: ${email}\nSenha inicial: ${DEFAULT_INVITED_PASSWORD}\n\nNo primeiro acesso, clique em "Primeiro acesso" para criar sua senha.\n\nAcesse a plataforma: ${platformLink}`
-  );
-  return `mailto:${encodeURIComponent(email)}?subject=${subject}&body=${body}`;
 }
 
 function openProjectDialog(projectId = null) {
@@ -4108,16 +4422,34 @@ function openProjectDialog(projectId = null) {
   document.getElementById("btnDeleteProject").style.visibility = project ? "visible" : "hidden";
 
   document.getElementById("projectId").value = project?.id || uid();
-  document.getElementById("projectCode").value = project?.code || nextCode();
+  const isNewProject = !project;
+  const isShortDoc = project
+    ? /^03-/.test(String(project.code || "").trim())
+    : false;
+  document.getElementById("projectCode").value = project?.code || nextCode(isShortDoc ? "03" : "02");
   document.getElementById("projectTitle").value = project?.title || "";
   document.getElementById("projectYear").value = project?.year || "";
-  document.getElementById("projectBudget").value = formatCurrencyInputBRL(
-    hasNumericValue(project?.budget) ? Number(project.budget) : hasNumericValue(project?.spent) ? Number(project.spent) : null
-  );
+  const totalValue = hasNumericValue(project?.budget) ? Number(project.budget) : hasNumericValue(project?.spent) ? Number(project.spent) : null;
+  const productionValue = hasNumericValue(project?.spentProduction) ? Number(project.spentProduction) : totalValue;
+  const teamValue = hasNumericValue(project?.spentTeam) ? Number(project.spentTeam) : 0;
+  document.getElementById("projectSpentProduction").value = formatCurrencyInputBRL(productionValue);
+  document.getElementById("projectSpentTeam").value = formatCurrencyInputBRL(teamValue || null);
+  updateProjectSpentTotal();
+  document.getElementById("projectSpentProduction").oninput = updateProjectSpentTotal;
+  document.getElementById("projectSpentTeam").oninput = updateProjectSpentTotal;
+
+  // Evento: mudança na Natureza atualiza SKU automaticamente para novos projetos
+  const natureSelect = document.getElementById("projectNature");
+  natureSelect.onchange = () => {
+    if (!isNewProject) return;
+    const isSD = normalizeSearchText(natureSelect.value) === normalizeSearchText(FIXED_NATURE_LABEL);
+    document.getElementById("projectCode").value = nextCode(isSD ? "03" : "02");
+  };
+
+  document.getElementById("projectFlagInfantil").checked = getProjectInfantilValue(project) === "Sim";
   document.getElementById("projectFlagCpb").checked = Boolean(project?.cpb);
   document.getElementById("projectFlagCrt").checked = Boolean(project?.crt);
   document.getElementById("projectFlagImdb").checked = Boolean(project?.imdb);
-  document.getElementById("projectInfantilContent").value = getProjectInfantilValue(project);
   const releaseDate = normalizeDateInput(project?.releaseDate || "");
   document.getElementById("projectReleaseDateText").value = releaseDate ? formatDatePtBr(releaseDate) : "";
   document.getElementById("projectReleaseDatePicker").value = releaseDate;
@@ -4136,19 +4468,26 @@ function collectProjectForm() {
   if (!canEditContent()) return null;
   const projectId = document.getElementById("projectId").value;
   const existingProject = state.projects.find((project) => project.id === projectId);
-  const rawBudget = document.getElementById("projectBudget").value.trim();
+  const rawProduction = document.getElementById("projectSpentProduction").value.trim();
+  const rawTeam = document.getElementById("projectSpentTeam").value.trim();
   const rawYear = document.getElementById("projectYear").value.trim();
   const rawReleaseDate = (document.getElementById("projectReleaseDateText").value || document.getElementById("projectReleaseDatePicker").value || "").trim();
   const normalizedReleaseDate = normalizeDateInput(rawReleaseDate);
-  const parsedBudget = parseCurrencyInputBRL(rawBudget);
+  const parsedProduction = rawProduction ? parseCurrencyInputBRL(rawProduction) : 0;
+  const parsedTeam = rawTeam ? parseCurrencyInputBRL(rawTeam) : 0;
+  const parsedBudget = (parsedProduction || 0) + (parsedTeam || 0) || null;
   const parsedYear = rawYear === "" ? null : Number(rawYear);
 
   if (rawReleaseDate && !normalizedReleaseDate) {
     alert("Lançamento inválido. Use o calendário ou o formato dd/mm/aaaa.");
     return null;
   }
-  if (rawBudget && parsedBudget === null) {
-    alert("Gasto inválido. Use um valor numérico.");
+  if (rawProduction && parsedProduction === null) {
+    alert("Custo de Produção inválido. Use um valor numérico.");
+    return null;
+  }
+  if (rawTeam && parsedTeam === null) {
+    alert("Cachê de Equipe inválido. Use um valor numérico.");
     return null;
   }
   if (rawYear && (!Number.isInteger(parsedYear) || parsedYear < 1900 || parsedYear > 2100)) {
@@ -4184,11 +4523,14 @@ function collectProjectForm() {
     nature: document.getElementById("projectNature").value,
     duration: document.getElementById("projectDuration").value,
     distributions: collectSelectedProjectDistributions(),
+    infantil: document.getElementById("projectFlagInfantil").checked,
     cpb: document.getElementById("projectFlagCpb").checked,
     crt: document.getElementById("projectFlagCrt").checked,
     imdb: document.getElementById("projectFlagImdb").checked,
-    infantilContent: document.getElementById("projectInfantilContent").value,
+    infantilContent: document.getElementById("projectFlagInfantil").checked ? "Sim" : "",
     status: document.getElementById("projectStatus").value,
+    spentProduction: parsedProduction || 0,
+    spentTeam: parsedTeam || 0,
     budget: parsedBudget,
     releaseDate: normalizedReleaseDate,
     // Sincroniza com o campo legado para evitar reexibição do valor após limpar.
@@ -4199,7 +4541,7 @@ function collectProjectForm() {
 }
 
 function openRouteItemDialog(routeItemId = null, forcedProjectId = "") {
-  if (!canEditContent()) {
+  if (!canEditRoute()) {
     alert("Perfil LEITOR possui apenas visualização.");
     return;
   }
@@ -4217,6 +4559,8 @@ function openRouteItemDialog(routeItemId = null, forcedProjectId = "") {
   document.getElementById("routeItemId").value = item?.id || uid();
   document.getElementById("routeProjectId").value = selectedProjectId;
   document.getElementById("routeItemName").value = item?.name || "";
+  document.getElementById("routeItemType").value = item?.type || "";
+  document.getElementById("routeItemFee").value = formatCurrencyInputBRL(item?.fee ?? null);
   document.getElementById("routeItemCountry").value = item?.country || "";
   document.getElementById("routeItemDeadline").value = normalizeDateInput(item?.submissionDeadline || "");
   document.getElementById("routeItemResultDate").value = normalizeDateInput(item?.resultDate || "");
@@ -4253,10 +4597,14 @@ function collectRouteItemForm() {
   };
   if (!validateUrl(noticeUrl, "Edital")) return null;
   if (!validateUrl(driveUrl, "Drive / URL")) return null;
+  const rawFee = String(document.getElementById("routeItemFee").value || "").trim();
+  const fee = rawFee ? parseCurrencyInputBRL(rawFee) : null;
   return {
     id: String(document.getElementById("routeItemId").value || "").trim() || uid(),
     projectId,
     name,
+    type: document.getElementById("routeItemType").value || "",
+    fee: fee != null && !isNaN(fee) ? fee : null,
     status: document.getElementById("routeItemStatus").value,
     country: String(document.getElementById("routeItemCountry").value || "").trim(),
     submissionDeadline: deadline,
@@ -4360,25 +4708,28 @@ function renderConfigList() {
     const arr = state.settings[selectedConfigKey] || [];
     list.innerHTML = arr
       .map(
-        (item, i) => `<li class="config-item" data-config-index="${i}" data-config-id="${i}">
+        (item, i) => {
+          const isProtected = isProtectedConfigItem(selectedConfigKey, item);
+          return `<li class="config-item" data-config-index="${i}" data-config-id="${i}">
       <span class="config-item-main">
-        ${editable ? '<button type="button" class="btn light config-drag-btn" draggable="true" title="Arrastar para ordenar" aria-label="Arrastar para ordenar">⋮⋮</button>' : ""}
+        ${editable && !isProtected ? '<button type="button" class="btn light config-drag-btn" draggable="true" title="Arrastar para ordenar" aria-label="Arrastar para ordenar">⋮⋮</button>' : ""}
         <span class="config-item-label">${escapeHtml(item)}</span>
       </span>
       <span class="actions">
         ${
           editable
             ? `${
-                hasColor
+                hasColor && !isProtected
                   ? `<input class="config-color-input" type="color" value="${getConfigItemColor(selectedConfigKey, item, i)}" data-action="item-color" data-id="${i}" />`
                   : ""
               }
-        <button class="btn light" data-action="edit" data-id="${i}">Editar</button>
-        <button class="btn danger" data-action="del" data-id="${i}">Excluir</button>`
+        ${isProtected ? "" : `<button class="btn light" data-action="edit" data-id="${i}">Editar</button>
+        <button class="btn danger" data-action="del" data-id="${i}">Excluir</button>`}`
             : ""
         }
       </span>
-    </li>`
+    </li>`;
+        }
       )
       .join("");
   }
@@ -4433,6 +4784,10 @@ function addConfigItem() {
     const value = prompt(`Novo ${label}:`);
     if (!value || !value.trim()) return;
     const nextValue = value.trim();
+    if (isProtectedConfigItem(selectedConfigKey, nextValue)) {
+      alert("Esse item é fixo do sistema e já está disponível.");
+      return;
+    }
     state.settings[selectedConfigKey].push(nextValue);
     if (COLOR_CONFIG_KEYS.has(selectedConfigKey)) {
       setConfigItemColor(selectedConfigKey, nextValue, getConfigItemColor(selectedConfigKey, nextValue, state.settings[selectedConfigKey].length - 1));
@@ -4464,6 +4819,10 @@ function deleteConfigItem(id) {
   } else {
     const arr = state.settings[selectedConfigKey];
     const removed = arr[Number(id)];
+    if (isProtectedConfigItem(selectedConfigKey, removed)) {
+      alert("Esse item é fixo do sistema e não pode ser excluído.");
+      return;
+    }
     arr.splice(Number(id), 1);
     if (COLOR_CONFIG_KEYS.has(selectedConfigKey)) {
       deleteConfigItemColor(selectedConfigKey, removed);
@@ -4512,6 +4871,10 @@ function openConfigItemDialog(id) {
     const idx = Number(id);
     const item = state.settings[key]?.[idx];
     if (!item) return;
+    if (isProtectedConfigItem(key, item)) {
+      alert("Esse item é fixo do sistema e não pode ser editado.");
+      return;
+    }
     currentName = item;
     currentColor = getConfigItemColor(key, item, idx);
   }
@@ -4563,6 +4926,7 @@ function saveConfigItemDialog() {
     const idx = Number(id);
     const current = arr[idx];
     if (!current) return;
+    if (isProtectedConfigItem(key, current)) return;
     arr[idx] = nextName;
     if (hasColor) {
       if (current !== nextName) renameConfigItemColor(key, current, nextName, idx);
@@ -4812,7 +5176,7 @@ function buildStateFromBase44Exports(fileMap, fallbackState) {
     categories,
     productionTypes: uniq([...pickName(productionTypeRows), ...projects.map((p) => p.productionType)]),
     formats: uniq([...pickName(formatRows), ...projects.map((p) => p.format)]),
-    natures: uniq([...pickName(natureRows), ...projects.map((p) => p.nature)]),
+    natures: ensureFixedNature(uniq([...pickName(natureRows), ...projects.map((p) => p.nature)])),
     durations: uniq([...pickName(durationRows), ...projects.map((p) => p.duration)]),
     statuses: uniq([...pickName(statusRows), ...projects.map((p) => p.status)]),
     stages: normalizeSettingsStages(stages.length ? stages : fallbackState.settings.stages, fallbackState.settings.stages)
@@ -5067,7 +5431,8 @@ function uniq(values) {
   return [...new Set(values.filter((v) => String(v || "").trim()))];
 }
 
-function renderBarChart(container, map, mode = "vertical", palette = ["#f3ba00"]) {
+function renderBarChart(container, map, mode = "vertical", palette = ["#f3ba00"], valueFormatter = null) {
+  if (!container) return;
   const entries = Object.entries(map);
   if (!entries.length) {
     container.innerHTML = '<div class="empty">Sem dados.</div>';
@@ -5093,10 +5458,11 @@ function renderBarChart(container, map, mode = "vertical", palette = ["#f3ba00"]
 
   container.innerHTML = entries
     .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
-    .map(([label, value], idx) => {
-      const color = palette[idx % palette.length];
-      const height = Math.max((Number(value) / max) * 110, 8);
-      return `<div class="bar-col"><div class="bar" style="height:${height}px; background:${color}"></div><small>${escapeHtml(label)}</small><small>${value}</small></div>`;
+      .map(([label, value], idx) => {
+        const color = palette[idx % palette.length];
+        const height = Math.max((Number(value) / max) * 110, 8);
+      const displayValue = typeof valueFormatter === "function" ? valueFormatter(Number(value), label) : value;
+      return `<div class="bar-col"><div class="bar" style="height:${height}px; background:${color}"></div><small>${escapeHtml(label)}</small><small>${escapeHtml(String(displayValue))}</small></div>`;
     })
     .join("");
 }
@@ -5130,6 +5496,101 @@ function renderDonutChart(container, map) {
   container.innerHTML = `<div class="chart-donut-wrap"><div class="donut" style="background: conic-gradient(${slices})"></div><ul class="legend">${legend}</ul></div>`;
 }
 
+// Horizontal bar chart com labels e valores compactos (para status/categoria/etc.)
+function renderHorizontalBarChart(container, map, palette = []) {
+  if (!container) return;
+  const entries = Object.entries(map).sort((a, b) => Number(b[1]) - Number(a[1]));
+  if (!entries.length) {
+    container.innerHTML = '<div class="empty">Sem dados.</div>';
+    return;
+  }
+  const max = Math.max(...entries.map(([, v]) => Number(v)), 1);
+  const defaultColors = ["#f3ba00", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#06b6d4", "#fb7185", "#94a3b8"];
+  container.innerHTML = entries
+    .map(([label, value], idx) => {
+      const color = (palette && palette[idx]) || defaultColors[idx % defaultColors.length];
+      const pct = Math.max((Number(value) / max) * 100, 4);
+      return `<div class="hbar-row">
+        <div class="hbar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <div class="hbar-value">${value}</div>
+      </div>`;
+    })
+    .join("");
+}
+
+// Tabela simples de tempo médio por etapa
+function renderAvgStageTable(container, map) {
+  if (!container) return;
+  const entries = Object.entries(map);
+  if (!entries.length) {
+    container.innerHTML = '<div class="empty">Sem dados suficientes para calcular.</div>';
+    return;
+  }
+  const max = Math.max(...entries.map(([, v]) => Number(v)), 1);
+  const stageColors = Object.fromEntries(
+    (state.settings.stages || []).map((s) => [s.name, s.color])
+  );
+  container.innerHTML = `<div class="avg-stage-table">
+    ${entries.map(([name, months]) => {
+      const color = stageColors[name] || "#94a3b8";
+      const pct = Math.max((Number(months) / max) * 100, 4);
+      return `<div class="avg-stage-row">
+        <div class="avg-stage-dot" style="background:${color}"></div>
+        <div class="avg-stage-name">${escapeHtml(name)}</div>
+        <div class="avg-stage-bar-wrap">
+          <div class="avg-stage-bar" style="width:${pct}%;background:${color}"></div>
+        </div>
+        <div class="avg-stage-val">${months} <span>meses</span></div>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+// Seção Maiores Investimentos
+function renderMaioresInvestimentos(container, projects) {
+  if (!container) return;
+  const withSpent = projects
+    .map((p) => ({ p, value: getProjectSpentValue(p) || 0 }))
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
+
+  if (!withSpent.length) {
+    container.innerHTML = '<div class="empty">Nenhum investimento registrado.</div>';
+    return;
+  }
+
+  const max = withSpent[0].value;
+  container.innerHTML = `<div class="top-inv-list">
+    ${withSpent.map(({ p, value }, idx) => {
+      const pct = Math.max((value / max) * 100, 2);
+      const production = hasNumericValue(p.spentProduction) ? Number(p.spentProduction) : value;
+      const team = hasNumericValue(p.spentTeam) ? Number(p.spentTeam) : 0;
+      const hasDetail = team > 0;
+      return `<div class="top-inv-item">
+        <div class="top-inv-rank">${idx + 1}</div>
+        <div class="top-inv-info">
+          <div class="top-inv-title" title="${escapeHtml(p.title || "")}">${escapeHtml(p.code ? p.code + " · " : "")}${escapeHtml(p.title || "Sem título")}</div>
+          <div class="top-inv-bar-wrap">
+            <div class="top-inv-bar" style="width:${pct}%">
+              ${hasDetail ? `<div class="top-inv-bar-team" style="width:${Math.round((team / value) * 100)}%"></div>` : ""}
+            </div>
+          </div>
+          ${hasDetail ? `<div class="top-inv-detail"><span>Produção: ${money(production)}</span><span class="top-inv-team-tag">Equipe: ${money(team)}</span></div>` : ""}
+        </div>
+        <div class="top-inv-value">${money(value)}</div>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+// Retorna array de cores configuradas para uma chave de settings
+function getConfigColors(key) {
+  const items = state.settings[key] || [];
+  return items.map((name) => getConfigItemColor(key, name, 0, true) || "#94a3b8");
+}
+
 function summaryIconHtml(icon) {
   if (icon === "projects") {
     return `<span class="metric-icon metric-icon-yellow" aria-hidden="true">
@@ -5141,19 +5602,34 @@ function summaryIconHtml(icon) {
       <svg viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2h1a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-1v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6zm2 0v14h10V6H6zm12 4v7h1v-7h-1zm-3 3h4v2h-4v-2z"/></svg>
     </span>`;
   }
+  if (icon === "production") {
+    return `<span class="metric-icon metric-icon-blue" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M2 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6zm4 0v10h8V6H6zm10 6v4h2v-4h-2zM9 9h2v6H9V9zm-2 2h2v2H7v-2zm4 0h2v2h-2v-2z"/></svg>
+    </span>`;
+  }
+  if (icon === "team") {
+    return `<span class="metric-icon metric-icon-green" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-4 0-7 2-7 3v1h14v-1c0-1-3-3-7-3zm7-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-.7 0-1.4.1-2 .3A5 5 0 0 1 16 14h6v-1c0-1-2.5-3-6-3z"/></svg>
+    </span>`;
+  }
   return `<span class="metric-icon metric-icon-blue" aria-hidden="true">
     <svg viewBox="0 0 24 24"><path d="M4 4h2v15h14v2H4V4zm4 9h2v4H8v-4zm4-6h2v10h-2V7zm4 3h2v7h-2v-7z"/></svg>
   </span>`;
 }
 
 function cardHtml(title, value, icon = "projects") {
-  return `<article class="card metric-card">
-    <div class="metric-content">
-      <span>${escapeHtml(title)}</span>
-      <strong>${escapeHtml(value)}</strong>
-    </div>
+  return `<article class="stat-card highlight">
+    <div class="stat-label">${escapeHtml(title)}</div>
+    <div class="stat-value">${escapeHtml(value)}</div>
     ${summaryIconHtml(icon)}
   </article>`;
+}
+
+function updateProjectSpentTotal() {
+  const production = parseCurrencyInputBRL(document.getElementById("projectSpentProduction")?.value || "") || 0;
+  const team = parseCurrencyInputBRL(document.getElementById("projectSpentTeam")?.value || "") || 0;
+  const totalEl = document.getElementById("projectSpentTotal");
+  if (totalEl) totalEl.textContent = money(production + team);
 }
 
 function inlineSelect(field, projectId, currentValue, options, badgeClass = "") {
@@ -5172,7 +5648,7 @@ function inlineSelect(field, projectId, currentValue, options, badgeClass = "") 
               : "";
   const hexColor = colorKey ? getConfigItemColor(colorKey, currentValue, 0, true) : "";
   const inlineStyle = hexColor ? ` style="background:${hexToRgba(hexColor, 0.16)};border-color:${hexToRgba(hexColor, 0.45)}"` : "";
-  const cls = `cell-inline-select${field === "status" && !inlineStyle && badgeClass ? ` status-${badgeClass}` : ""}`;
+  const cls = `isel${!currentValue || !hexColor ? " isel-nil" : ""}`;
   return `<select class="${cls}" data-action="inline-select" data-field="${field}" data-id="${projectId}"${inlineStyle}>
     ${values
       .map((value) => `<option value="${escapeHtml(value)}" ${String(currentValue || "") === String(value) ? "selected" : ""}>${escapeHtml(value || "—")}</option>`)
@@ -6006,16 +6482,17 @@ async function hydrateStateFromIndexedDb(currentState) {
   return candidate;
 }
 
-function nextCode() {
+function nextCode(prefix = "02") {
   const skus = state.projects.map((p) => String(p.code || "").trim()).filter(Boolean);
-  const matched = skus.map((sku) => sku.match(/^(\d+)-(\d+)$/)).filter(Boolean);
-  if (matched.length) {
-    const prefix = matched[0][1];
-    const next = Math.max(...matched.map((m) => Number(m[2]) || 0)) + 1;
-    return `${prefix}-${String(next).padStart(2, "0")}`;
-  }
-  const n = skus.length + 1;
-  return `02-${String(n).padStart(2, "0")}`;
+  const used = new Set(
+    skus
+      .map((sku) => sku.match(/^(\d+)-(\d+)$/))
+      .filter((m) => m && m[1] === prefix)
+      .map((m) => Number(m[2]))
+  );
+  let n = 1;
+  while (used.has(n)) n++;
+  return `${prefix}-${String(n).padStart(2, "0")}`;
 }
 
 function uid() {
@@ -6089,7 +6566,7 @@ function sanitizeUserForState(user) {
     id: String(user.id || email).trim() || email,
     name: String(user.name || "").trim() || displayNameFromEmail(email),
     email,
-    role: ["ADMIN", "EDITOR", "LEITOR"].includes(String(user.role || "").trim().toUpperCase())
+    role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(String(user.role || "").trim().toUpperCase())
       ? String(user.role || "").trim().toUpperCase()
       : "LEITOR",
     active: user.active !== false,
@@ -6097,7 +6574,7 @@ function sanitizeUserForState(user) {
   };
 }
 
-function setUserFirstAccessPending(email, pending) {
+function setUserFirstAccessPending(email, pending, role = "") {
   const normalizedEmail = normalizeUserEmail(email);
   if (!normalizedEmail) return;
   const existing = Array.isArray(state.users)
@@ -6112,7 +6589,7 @@ function setUserFirstAccessPending(email, pending) {
     id: normalizedEmail,
     name: displayNameFromEmail(normalizedEmail),
     email: normalizedEmail,
-    role: "LEITOR",
+    role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(String(role || "").trim().toUpperCase()) ? String(role).trim().toUpperCase() : "LEITOR",
     active: true,
     invitedAt: new Date().toISOString(),
     firstAccessPending: Boolean(pending)
@@ -6343,11 +6820,11 @@ function normalizeProjectForMerge(project) {
     nature: String(project.nature || "").trim(),
     duration: String(project.duration || "").trim(),
     distributions: getProjectDistributions(project),
+    infantil: Boolean(project.infantil) || getProjectInfantilValue(project) === "Sim",
     cpb: Boolean(project.cpb),
     crt: Boolean(project.crt),
     imdb: Boolean(project.imdb),
     infantilContent: getProjectInfantilValue(project),
-    infantil: getProjectInfantilValue(project) === "Sim",
     status: String(project.status || "").trim(),
     budget,
     spent,
@@ -6689,16 +7166,14 @@ function mergeConcurrentState(baseState, localState, remoteState, auditEntries =
 
 function mergeLocalAndRemoteState(localState, remoteState) {
   if (!remoteState) return localState;
-  const localProjects = Array.isArray(localState?.projects) ? localState.projects : [];
-  const remoteProjects = Array.isArray(remoteState?.projects) ? remoteState.projects : [];
 
-  const primary = remoteProjects.length >= localProjects.length ? remoteState : localState;
-  const secondary = primary === remoteState ? localState : remoteState;
-
+  // O estado remoto (Supabase) é sempre a fonte de verdade na hidratação.
+  // Alterações locais não confirmadas são descartadas em favor do estado sincronizado.
+  // Apenas usuários e logs de auditoria são mesclados para preservar dados de ambos os lados.
   return {
-    ...primary,
-    users: mergeUsersByEmail(primary.users || [], secondary.users || []),
-    auditLogs: appendAuditLogs(primary.auditLogs || [], secondary.auditLogs || [])
+    ...remoteState,
+    users: mergeUsersByEmail(remoteState.users || [], localState.users || []),
+    auditLogs: appendAuditLogs(remoteState.auditLogs || [], localState.auditLogs || [])
   };
 }
 
@@ -6746,7 +7221,6 @@ async function fetchSecureUsersFromSupabase() {
     const { data, error } = await client
       .from(SUPABASE_USERS_TABLE)
       .select("email,name,role,active,invited_at")
-      .eq("active", true)
       .order("name", { ascending: true });
     if (error) throw error;
     return (data || []).map((row) =>
@@ -6816,12 +7290,42 @@ async function upsertSecureUserInSupabase(user) {
   return sanitized;
 }
 
+async function setUserPasswordAsAdmin(targetEmail, password, { sendInvite = false } = {}) {
+  const { url, anonKey } = getSupabaseConfig();
+  const accessToken = supabaseAuthSession?.access_token;
+  if (!url || !accessToken) return { error: new Error("Sessão não encontrada. Faça login novamente.") };
+  const functionUrl = `${url.replace(/\/+$/, "")}/functions/v1/set-user-password`;
+  console.info("[Originais] Chamando Edge Function:", functionUrl);
+  try {
+    const response = await fetch(functionUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${accessToken}`,
+        "apikey": anonKey
+      },
+      body: JSON.stringify({ targetEmail, password, sendInvite })
+    });
+    const text = await response.text().catch(() => "");
+    let data = {};
+    try { data = JSON.parse(text); } catch (_) {}
+    console.info("[Originais] Edge Function resposta:", response.status, text.slice(0, 300));
+    if (!response.ok || data?.error) {
+      return { error: new Error(data?.error || data?.message || `Erro HTTP ${response.status}: ${text.slice(0, 100)}`) };
+    }
+    return { data };
+  } catch (err) {
+    console.error("[Originais] Edge Function fetch falhou:", err);
+    return { error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
 async function deleteSecureUserFromSupabase(email) {
   const client = getSupabaseClient();
   if (!client?.auth || typeof client.from !== "function") throw new Error("Supabase Auth indisponível.");
   const normalizedEmail = normalizeUserEmail(email);
   if (!normalizedEmail) return;
-  const { error } = await client.from(SUPABASE_USERS_TABLE).update({ active: false }).eq("email", normalizedEmail);
+  const { error } = await client.from(SUPABASE_USERS_TABLE).delete().eq("email", normalizedEmail);
   if (error) throw error;
 }
 
@@ -6834,6 +7338,10 @@ async function refreshSecureUsersFromSupabase({ persist = true } = {}) {
 
 function getCurrentAuthEmail() {
   return normalizeUserEmail(supabaseAuthSession?.user?.email || "");
+}
+
+function shouldPersistUsersInAppState() {
+  return !isRemoteSupabaseAuthEnabled();
 }
 
 function canSyncToSupabase() {
@@ -6883,7 +7391,9 @@ async function persistStateToSupabase(stateRaw) {
     const actor = getCurrentUser();
     const auditEntries = buildProjectAuditEntries(baseState?.projects || [], localState?.projects || [], actor);
     payload = mergeConcurrentState(baseState, localState, remoteState || baseState, auditEntries);
-    payload.users = (Array.isArray(localState.users) ? localState.users : []).map(sanitizeUserForState).filter(Boolean);
+    payload.users = shouldPersistUsersInAppState()
+      ? (Array.isArray(localState.users) ? localState.users : []).map(sanitizeUserForState).filter(Boolean)
+      : [];
 
     try {
       await writeSupabaseState(client, payload);
@@ -7069,7 +7579,7 @@ function mergeState(parsed) {
     categories: pickArray(parsed?.settings?.categories, base.settings.categories),
     productionTypes: pickArray(parsed?.settings?.productionTypes, base.settings.productionTypes),
     formats: pickArray(parsed?.settings?.formats, base.settings.formats),
-    natures: pickArray(parsed?.settings?.natures, base.settings.natures),
+    natures: ensureFixedNature(pickArray(parsed?.settings?.natures, base.settings.natures)),
     durations: pickArray(parsed?.settings?.durations, base.settings.durations),
     distributions: pickArray(parsed?.settings?.distributions, base.settings.distributions),
     statuses: pickArray(parsed?.settings?.statuses, base.settings.statuses),
@@ -7088,14 +7598,16 @@ function mergeState(parsed) {
     ? parsed.routes.map(normalizeRouteItemForMerge).filter(Boolean)
     : base.routes;
   const routeProjects = normalizeRouteProjectIds(parsed?.routeProjects || base.routeProjects);
-  const users = Array.isArray(parsed?.users) && parsed.users.length
+  const users = !shouldPersistUsersInAppState()
+    ? []
+    : Array.isArray(parsed?.users) && parsed.users.length
     ? parsed.users
         .filter((user) => user && typeof user === "object")
         .map((user) => ({
           id: user.id || uid(),
           name: String(user.name || "").trim(),
           email: String(user.email || "").trim().toLowerCase(),
-          role: ["ADMIN", "EDITOR", "LEITOR"].includes(user.role) ? user.role : "LEITOR",
+          role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(user.role) ? user.role : "LEITOR",
           passwordHash:
             String(user.passwordHash || "").trim() ||
             (
@@ -7139,6 +7651,7 @@ function seedState() {
     cloned.settings = cloned.settings || {};
     cloned.settings.stages = normalizeSettingsStages(cloned.settings.stages, []);
     cloned.settings.distributions = pickArray(cloned.settings.distributions, ["Lumine", "Prime"]);
+    cloned.settings.natures = ensureFixedNature(pickArray(cloned.settings.natures, ["Documental", "Ficção", "Animação", FIXED_NATURE_LABEL]));
     cloned.settings.routeStatuses = pickArray(
       cloned.settings.routeStatuses,
       ["BACKLOG", "AGUARDANDO ABERTURA", "EM ANDAMENTO", "SUBMETIDO", "NÃO SUBMETIDO", "SELECIONADO", "NOMEADO", "PREMIADO", "NÃO SELECIONADO", "CONCLUÍDO"]
@@ -7149,7 +7662,7 @@ function seedState() {
           id: user.id || uid(),
           name: String(user.name || "").trim(),
           email: String(user.email || "").trim().toLowerCase(),
-          role: ["ADMIN", "EDITOR", "LEITOR"].includes(user.role) ? user.role : "LEITOR",
+          role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(user.role) ? user.role : "LEITOR",
           passwordHash:
             String(user.passwordHash || "").trim() ||
             (
@@ -7227,7 +7740,7 @@ function seedState() {
       categories: ["Streaming", "Produtora", "Incubado"],
       productionTypes: ["Documentário", "Curta", "Série"],
       formats: ["Obra Não Seriada", "Série"],
-      natures: ["Documental", "Ficção", "Animação"],
+      natures: ensureFixedNature(["Documental", "Ficção", "Animação"]),
       durations: ["Média-metragem", "Curta-metragem", "Longa-metragem"],
       distributions: ["Lumine", "Prime"],
       statuses: ["Em andamento", "Concluído", "Planejamento", "Pausado"],
@@ -7332,6 +7845,7 @@ function stageSeed(stageId, start, end) {
 }
 
 async function bootApp() {
+  state = seedState();
   initTheme();
   try {
     await init();

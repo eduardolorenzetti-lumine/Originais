@@ -5,69 +5,93 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Language" content="pt-BR" />
   <title>Originais Lumine</title>
+  <link rel="icon" type="image/png" href="assets/images/lumine-favicon.png" />
+  <link rel="stylesheet" href="lumine-design-system.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
+  <!-- Splash screen exibido enquanto o Supabase Auth inicializa -->
+  <div id="authLoadingScreen" class="auth-loading-screen">
+    <div class="auth-loading-brand">
+      <div class="logo-mark" aria-hidden="true">
+        <span class="logo-l">L</span>
+        <span class="logo-point"></span>
+      </div>
+      <div>
+        <strong>ORIGINAIS</strong>
+        <small>LUMINE</small>
+      </div>
+    </div>
+    <div class="auth-loading-spinner" aria-label="Carregando..."></div>
+  </div>
+
+  <section id="recoveryView" class="login-view" hidden>
+    <div class="login-card">
+      <div class="login-brand">
+        <img src="assets/images/luminstudios-logoblack.png" alt="Lumine Studios" class="login-logo-img" />
+      </div>
+      <form id="recoveryForm" class="login-form" autocomplete="off">
+        <h3 class="login-form-title">Redefinir senha</h3>
+        <p class="login-form-subtitle">Crie uma nova senha para sua conta.</p>
+        <label>Nova senha
+          <input id="recoveryPassword" type="text" required minlength="6" autocomplete="off" placeholder="Mínimo 6 caracteres" />
+        </label>
+        <label>Confirmar nova senha
+          <input id="recoveryPasswordConfirm" type="text" required minlength="6" autocomplete="off" />
+        </label>
+        <p id="recoveryError" class="login-error" hidden></p>
+        <button type="submit" class="btn accent login-submit-btn">
+          <span class="btn-label">Salvar nova senha</span>
+          <span class="btn-spinner" aria-hidden="true"></span>
+        </button>
+      </form>
+    </div>
+  </section>
+
   <section id="loginView" class="login-view" hidden>
     <div class="login-card">
       <a href="#" class="login-brand brand-link" data-go-home>
-        <div class="logo-mark" aria-hidden="true">
-          <span class="logo-l">L</span>
-          <span class="logo-point"></span>
-        </div>
-        <div>
-          <strong>ORIGINAIS</strong>
-          <small>LUMINE</small>
-        </div>
+        <img src="assets/images/luminstudios-logoblack.png" alt="Lumine Studios" class="login-logo-img" />
       </a>
-      <form id="loginForm" class="login-form" autocomplete="on">
+      <form id="loginForm" class="login-form" autocomplete="off">
         <label>E-mail
-          <input id="loginEmail" type="email" required autocomplete="email" />
+          <input id="loginEmail" type="email" required autocomplete="off" />
         </label>
         <label>Senha
-          <input id="loginPassword" type="password" required autocomplete="current-password" />
+          <input id="loginPassword" type="text" required autocomplete="new-password" />
         </label>
         <p id="loginStatus" class="login-status" hidden></p>
         <p id="loginError" class="login-error" hidden></p>
-        <button type="submit" class="btn accent">Entrar</button>
+        <button type="submit" class="btn accent login-submit-btn">
+          <span class="btn-label">Entrar</span>
+          <span class="btn-spinner" aria-hidden="true"></span>
+        </button>
         <div class="login-help-actions">
           <button id="forgotPasswordBtn" type="button" class="login-help-btn">Esqueci minha senha!</button>
-          <button id="firstAccessBtn" type="button" class="login-help-btn">Primeiro acesso</button>
         </div>
       </form>
     </div>
   </section>
 
-  <div id="appShell" class="app-shell" hidden>
-    <aside class="sidebar">
-      <a href="#" class="brand brand-link" data-go-home>
-        <div class="logo-mark" aria-hidden="true">
-          <span class="logo-l">L</span>
-          <span class="logo-point"></span>
-        </div>
-        <div>
-          <strong>ORIGINAIS</strong>
-          <small>LUMINE</small>
-        </div>
+  <div id="appShell" hidden>
+    <nav class="nav">
+      <a href="#" class="nav-logo brand-link" data-go-home>
+        <img src="assets/images/luminstudios-logowhite.png" alt="Lumine Studios" class="nav-logo-img" />
       </a>
 
-      <nav class="side-nav">
-        <button class="nav-btn active" data-tab="dashboard">Dashboard</button>
-        <button class="nav-btn" data-tab="cronograma">Cronograma</button>
-        <button class="nav-btn" data-tab="projetos">Projetos</button>
-        <button class="nav-btn" data-tab="rota">Rota</button>
-        <button class="nav-btn" data-tab="usuarios">Usuários</button>
-        <button class="nav-btn" data-tab="configuracoes">Configurações</button>
-      </nav>
-    </aside>
+      <div class="nav-links">
+        <button class="nav-link nav-btn active" data-tab="dashboard">Dashboard</button>
+        <button class="nav-link nav-btn" data-tab="cronograma">Cronograma</button>
+        <button class="nav-link nav-btn" data-tab="projetos">Projetos</button>
+        <button class="nav-link nav-btn" data-tab="rota">Rota</button>
+        <button class="nav-link nav-btn" data-tab="usuarios">Usuários</button>
+        <button class="nav-link nav-btn" data-tab="configuracoes">Configurações</button>
+      </div>
 
-    <main class="content">
-      <div class="content-top-actions">
+      <div class="nav-right">
         <div id="profileMenu" class="profile-menu">
-          <button id="profileMenuBtn" class="btn light profile-menu-btn" type="button" aria-label="Perfil">
-            <svg class="profile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z"/></svg>
-            <svg class="profile-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
-          </button>
+          <button id="profileMenuBtn" class="nav-avatar" type="button" aria-label="Perfil"></button>
           <div id="profileMenuList" class="profile-menu-list" hidden>
             <div id="profileMenuUser" class="profile-menu-user"></div>
             <button type="button" id="profileViewEditBtn">Ver e Editar Perfil</button>
@@ -83,16 +107,21 @@
           </div>
         </div>
       </div>
+    </nav>
+
+    <main class="page">
 
       <section id="dashboard" class="tab active">
-        <header class="view-header">
+        <header class="page-header">
           <div>
-            <h1>Dashboard</h1>
-            <p>Visão geral das suas produções</p>
+            <h1 class="page-title">Dashboard</h1>
+            <p class="page-subtitle">Visão geral das suas produções</p>
           </div>
         </header>
 
-        <div class="dashboard-top-controls">
+        <div id="dashboardViewTabs" class="dashboard-view-tabs"></div>
+
+        <div class="dashboard-top-controls" id="dashboardProdControls">
           <div class="year-inline">
             <strong>ANO:</strong>
             <div id="yearChips" class="chips"></div>
@@ -126,10 +155,6 @@
             <div id="dashboardFlagChips" class="chips"></div>
           </div>
           <div class="filter-row">
-            <strong>Infantil:</strong>
-            <div id="dashboardInfantilChips" class="chips"></div>
-          </div>
-          <div class="filter-row">
             <strong>Distribuição:</strong>
             <div id="dashboardDistributionChips" class="chips"></div>
           </div>
@@ -139,52 +164,89 @@
           </div>
         </section>
 
-        <div id="summaryCards" class="summary-cards"></div>
+        <!-- Seção: Produções -->
+        <div id="projectsDashboardSection">
+          <div id="summaryCards" class="summary-cards summary-grid cols-5"></div>
 
-        <div class="dashboard-grid">
-          <article class="panel wide">
-            <h3>Produções por Ano</h3>
-            <div id="chartByYear" class="chart-bars"></div>
-          </article>
+          <div class="dashboard-grid">
+            <article class="card panel wide">
+              <div class="card-header"><span class="card-title">Produções por Ano</span></div>
+              <div class="card-body"><div id="chartByYear" class="chart-bars"></div></div>
+            </article>
 
-          <article class="panel wide">
-            <h3>Tempo Médio por Etapa (meses)</h3>
-            <div id="chartAvgStage" class="chart-bars horizontal"></div>
-          </article>
+            <article class="card panel wide">
+              <div class="card-header"><span class="card-title">Tempo Médio por Etapa</span></div>
+              <div class="card-body"><div id="chartAvgStage" class="avg-stage-table-wrap"></div></div>
+            </article>
 
-          <article class="panel">
-            <h3>Por Status</h3>
-            <div id="chartByStatus" class="chart-bars"></div>
-          </article>
+            <article class="card panel">
+              <div class="card-header"><span class="card-title">Por Status</span></div>
+              <div class="card-body"><div id="chartByStatus" class="chart-bars horizontal"></div></div>
+            </article>
 
-          <article class="panel">
-            <h3>Por Categoria</h3>
-            <div id="chartByCategory" class="chart-bars"></div>
-          </article>
+            <article class="card panel">
+              <div class="card-header"><span class="card-title">Por Categoria</span></div>
+              <div class="card-body"><div id="chartByCategory" class="chart-bars horizontal"></div></div>
+            </article>
 
-          <article class="panel">
-            <h3>Por Formato</h3>
-            <div id="chartByFormat" class="chart-bars"></div>
-          </article>
+            <article class="card panel">
+              <div class="card-header"><span class="card-title">Por Formato</span></div>
+              <div class="card-body"><div id="chartByFormat" class="chart-bars horizontal"></div></div>
+            </article>
 
-          <article class="panel">
-            <h3>Por Natureza</h3>
-            <div id="chartByNature" class="chart-bars"></div>
-          </article>
+            <article class="card panel">
+              <div class="card-header"><span class="card-title">Por Natureza</span></div>
+              <div class="card-body"><div id="chartByNature" class="chart-bars horizontal"></div></div>
+            </article>
 
-          <article class="panel">
-            <h3>Por Duração</h3>
-            <div id="chartByDuration" class="chart-bars"></div>
-          </article>
+            <article class="card panel">
+              <div class="card-header"><span class="card-title">Por Duração</span></div>
+              <div class="card-body"><div id="chartByDuration" class="chart-bars horizontal"></div></div>
+            </article>
 
+            <article class="card panel wide">
+              <div class="card-header">
+                <span class="card-title">Maiores Investimentos</span>
+              </div>
+              <div class="card-body"><div id="maioresInvestimentos" class="maiores-investimentos-wrap"></div></div>
+            </article>
+
+            <article class="card panel">
+              <div class="card-header"><span class="card-title">Gasto com Short docs</span></div>
+              <div class="card-body"><div id="chartShortDocsSpent" class="chart-bars"></div></div>
+            </article>
+          </div>
         </div>
+
+        <!-- Seção: Rota -->
+        <div id="routeDashboardSection">
+          <div id="routeSummaryCards" class="route-summary-cards summary-grid"></div>
+
+          <div class="dashboard-grid">
+            <article class="card panel wide route-highlights-panel">
+              <div class="card-header"><span class="card-title">Premiações</span></div>
+              <div class="card-body"><div id="routeHighlights" class="route-highlights"></div></div>
+            </article>
+
+            <article class="card panel">
+              <div class="card-header"><span class="card-title">Inscrições por Status</span></div>
+              <div class="card-body"><div id="chartRouteByStatus" class="chart-bars"></div></div>
+            </article>
+
+            <article class="card panel">
+              <div class="card-header"><span class="card-title">Top 5 Destaques</span></div>
+              <div class="card-body"><div id="routeTop5" class="route-top5"></div></div>
+            </article>
+          </div>
+        </div>
+
       </section>
 
       <section id="cronograma" class="tab">
-        <header class="view-header">
+        <header class="page-header">
           <div>
-            <h1>Cronograma</h1>
-            <p>Visão de Gantt das produções</p>
+            <h1 class="page-title">Cronograma</h1>
+            <p class="page-subtitle">Visão de Gantt das produções</p>
           </div>
         </header>
 
@@ -202,6 +264,10 @@
           <div class="filter-row">
             <strong>Status:</strong>
             <div id="ganttStatusChips" class="chips"></div>
+          </div>
+          <div class="filter-row">
+            <strong>Etapa:</strong>
+            <div id="ganttStageChips" class="chips"></div>
           </div>
           <div class="filter-row">
             <strong>Categoria:</strong>
@@ -222,10 +288,6 @@
           <div class="filter-row">
             <strong>Registros:</strong>
             <div id="ganttFlagChips" class="chips"></div>
-          </div>
-          <div class="filter-row">
-            <strong>Infantil:</strong>
-            <div id="ganttInfantilChips" class="chips"></div>
           </div>
           <div class="filter-row">
             <strong>Distribuição:</strong>
@@ -264,10 +326,10 @@
 
       <section id="projetos" class="tab">
         <div class="projects-top-sticky">
-          <header class="view-header">
+          <header class="page-header">
             <div>
-              <h1>Projetos</h1>
-              <p>Gerencie suas produções audiovisuais</p>
+              <h1 class="page-title">Projetos</h1>
+              <p class="page-subtitle">Gerencie suas produções audiovisuais</p>
             </div>
           </header>
 
@@ -307,10 +369,6 @@
               <div id="projectFlagChips" class="chips"></div>
             </div>
             <div class="filter-row">
-              <strong>Infantil:</strong>
-              <div id="projectInfantilChips" class="chips"></div>
-            </div>
-            <div class="filter-row">
               <strong>Distribuição:</strong>
               <div id="projectDistributionChips" class="chips"></div>
             </div>
@@ -323,12 +381,7 @@
           <div class="table-tools">
             <input id="projectSearch" placeholder="Buscar por nome ou SKU..." />
             <div class="project-tools-actions">
-              <button id="btnImportCsv" class="btn light project-import-btn" type="button">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l4 4h-3v7h-2V7H8l4-4zm-7 12h2v4h10v-4h2v6H5v-6z"/></svg>
-                <span>Importar CSV</span>
-              </button>
-              <input id="csvInput" type="file" accept=".csv" multiple hidden />
-              <button id="btnNewProject" class="btn accent project-new-btn" type="button">
+<button id="btnNewProject" class="btn accent project-new-btn" type="button">
                 <span class="plus">+</span>
                 <span>Novo Projeto</span>
               </button>
@@ -336,8 +389,8 @@
           </div>
         </div>
 
-        <div class="table-wrap projects-table-wrap">
-          <table>
+        <div class="table-wrap table-scroll projects-table-wrap">
+          <table class="table-main">
             <thead>
               <tr>
                 <th>SKU</th>
@@ -346,7 +399,7 @@
                 <th>Formato</th>
                 <th>Natureza</th>
                 <th>Duração</th>
-                <th>Conteúdo Infantil</th>
+                <th>Infantil</th>
                 <th>CPB</th>
                 <th>CRT</th>
                 <th>IMDb</th>
@@ -360,27 +413,28 @@
       </section>
 
       <section id="usuarios" class="tab">
-        <header class="view-header">
+        <header class="page-header">
           <div>
-            <h1>Usuários</h1>
-            <p>Cadastre usuários e defina níveis de acesso</p>
+            <h1 class="page-title">Usuários</h1>
+            <p class="page-subtitle">Cadastre usuários e defina níveis de acesso</p>
           </div>
           <div class="header-actions">
             <button id="btnCreateUser" class="btn accent">+ Cadastrar Usuário</button>
           </div>
         </header>
 
-        <article class="panel user-roles-panel">
-          <h3>Níveis de Gestão</h3>
+        <article class="card panel user-roles-panel">
+          <div class="card-header"><span class="card-title">Níveis de Gestão</span></div><div class="card-body user-roles-body">
           <div class="user-role-grid">
             <div><strong>ADMIN</strong><small>Gestão completa</small></div>
             <div><strong>EDITOR</strong><small>Edição de conteúdo, sem gestão de usuários</small></div>
             <div><strong>LEITOR</strong><small>Somente visualização</small></div>
           </div>
+          </div>
         </article>
 
-        <div class="table-wrap">
-          <table>
+        <div class="table-wrap table-scroll">
+          <table class="table-main">
             <thead>
               <tr>
                 <th>Nome</th>
@@ -397,10 +451,10 @@
       </section>
 
       <section id="rota" class="tab">
-        <header class="view-header">
+        <header class="page-header">
           <div>
-            <h1>Rota</h1>
-            <p>Acompanhe o caminho das produções em festivais e prêmios</p>
+            <h1 class="page-title">Rota</h1>
+            <p class="page-subtitle">Acompanhe o caminho das produções em festivais e prêmios</p>
           </div>
         </header>
 
@@ -420,26 +474,18 @@
             <div id="routeCountryFilter"></div>
           </div>
           <div class="filter-row">
-            <strong>Resultado:</strong>
-            <div id="routeResultYearChips" class="chips"></div>
-          </div>
-          <div class="filter-row">
             <strong>Exclusividade:</strong>
             <div id="routeExclusivityChips" class="chips"></div>
           </div>
         </section>
 
         <div class="route-toolbar">
-          <div id="routeSummary" class="route-summary">
-            <button id="btnAddRouteProject" class="btn accent" type="button">+ Adicionar Filme</button>
-          </div>
-          <div class="route-toolbar-actions">
-            <input id="routeSearch" placeholder="Buscar filme, festival ou prêmio..." />
-          </div>
+          <input id="routeSearch" placeholder="Buscar filme, festival ou prêmio..." />
+          <div id="routeSummary" class="route-summary"></div>
         </div>
 
-        <div class="table-wrap route-table-wrap">
-          <table>
+        <div class="table-wrap table-scroll route-table-wrap">
+          <table class="table-main">
             <colgroup>
               <col class="route-col route-col-1" />
               <col class="route-col route-col-2" />
@@ -470,20 +516,22 @@
       </section>
 
       <section id="configuracoes" class="tab">
-        <header class="view-header">
+        <header class="page-header">
           <div>
-            <h1>Configurações</h1>
-            <p>Gerencie categorias, formatos, status e etapas</p>
+            <h1 class="page-title">Configurações</h1>
+            <p class="page-subtitle">Gerencie categorias, formatos, status e etapas</p>
           </div>
         </header>
 
         <div id="configTabs" class="chips tabs-like"></div>
-        <article class="panel">
-          <div class="panel-head">
-            <h3 id="configTitle"></h3>
+        <article class="card panel">
+          <div class="card-header">
+            <span class="card-title" id="configTitle"></span>
             <button id="btnAddConfig" class="btn accent">+ Adicionar</button>
           </div>
-          <ul id="configList" class="config-list"></ul>
+          <div class="card-body">
+            <ul id="configList" class="config-list"></ul>
+          </div>
         </article>
       </section>
     </main>
@@ -495,22 +543,17 @@
       <input type="hidden" id="projectId" />
 
       <div class="form-grid">
-        <label>SKU <input id="projectCode" required /></label>
+        <label>SKU <input id="projectCode" required readonly /></label>
         <label>Título <input id="projectTitle" required /></label>
+        <label>Natureza <select id="projectNature"></select></label>
         <label>Ano <input id="projectYear" type="number" min="1900" max="2100" /></label>
         <label>Categoria <select id="projectCategory"></select></label>
         <label>Formato <select id="projectFormat"></select></label>
-        <label>Natureza <select id="projectNature"></select></label>
         <label>Duração <select id="projectDuration"></select></label>
-        <label>Conteúdo Infantil
-          <select id="projectInfantilContent">
-            <option value="">Selecione</option>
-            <option value="Sim">Sim</option>
-            <option value="Não">Não</option>
-          </select>
-        </label>
         <label>Status <select id="projectStatus"></select></label>
-        <label>Gasto (R$) <input id="projectBudget" type="text" inputmode="decimal" placeholder="R$ 0,00" /></label>
+        <label>Custo de Produção (R$) <input id="projectSpentProduction" type="text" inputmode="decimal" placeholder="R$ 0,00" /></label>
+        <label>Cachê de Equipe (R$) <input id="projectSpentTeam" type="text" inputmode="decimal" placeholder="R$ 0,00" /></label>
+        <label>Investimento Total <span id="projectSpentTotal" class="spent-total-display">R$ 0,00</span></label>
         <label>Lançamento
           <div class="release-field-wrap">
             <input id="projectReleaseDateText" class="release-field-text" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" />
@@ -521,6 +564,7 @@
           </div>
         </label>
         <div class="project-flags-grid">
+          <label class="checkbox-inline"><input id="projectFlagInfantil" type="checkbox" /> Infantil</label>
           <label class="checkbox-inline"><input id="projectFlagCpb" type="checkbox" /> CPB</label>
           <label class="checkbox-inline"><input id="projectFlagCrt" type="checkbox" /> CRT</label>
           <label class="checkbox-inline"><input id="projectFlagImdb" type="checkbox" /> IMDb</label>
@@ -551,54 +595,46 @@
   </dialog>
 
   <dialog id="userDialog">
-    <form id="userForm" method="dialog">
+    <form id="userForm" method="dialog" autocomplete="off">
       <h3 id="userDialogTitle">Cadastrar Usuário</h3>
       <input type="hidden" id="userId" />
       <div class="form-grid user-form-grid">
         <label>Nome
-          <input id="userName" required />
+          <input id="userName" required autocomplete="off" />
         </label>
         <label>E-mail
-          <input id="userEmail" type="email" required />
+          <!-- type="text" evita que browsers interpretem como campo de login e peçam para salvar senha -->
+          <input id="userEmail" type="text" inputmode="email" required autocomplete="off" />
         </label>
         <label>Função
           <select id="userRole">
             <option>ADMIN</option>
             <option>EDITOR</option>
+            <option>EDITOR ROTA</option>
             <option>LEITOR</option>
           </select>
         </label>
-        <label>Acesso
-          <input id="userPassword" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo 6 caracteres" />
-        </label>
-        <label>Confirmar acesso
-          <input id="userPasswordConfirm" type="password" autocomplete="new-password" minlength="6" />
-        </label>
       </div>
-      <p id="userPasswordHint" class="dialog-hint" hidden>Deixe os campos de senha em branco para manter a senha atual.</p>
+      <!-- Toggle de senha provisória — visível apenas para novos usuários (JS controla) -->
+      <label id="userSetPasswordRow" class="toggle-row" hidden>
+        <span>Definir senha provisória</span>
+        <input type="checkbox" id="userSetPassword" />
+      </label>
+      <div id="userPasswordFields" hidden>
+        <div class="form-grid">
+          <label><span id="userPasswordLabelText">Senha provisória</span>
+            <!-- type="text" → convertido para "password" via JS para evitar prompt "Salvar Senha" -->
+            <input id="userPassword" type="text" autocomplete="off" minlength="6" placeholder="Mínimo 6 caracteres" />
+          </label>
+          <label><span id="userPasswordConfirmLabelText">Confirmar senha provisória</span>
+            <input id="userPasswordConfirm" type="text" autocomplete="off" minlength="6" />
+          </label>
+        </div>
+        <p id="userPasswordHint" class="dialog-hint">Defina uma senha provisória para o novo usuário. No primeiro login ele será obrigado a criar uma nova senha.</p>
+      </div>
       <menu class="dialog-actions">
         <button type="button" id="userCancelBtn" class="btn light">Cancelar</button>
         <button type="submit" class="btn accent">Salvar Usuário</button>
-      </menu>
-    </form>
-  </dialog>
-
-  <dialog id="inviteDialog">
-    <form id="inviteForm" method="dialog">
-      <h3>Convidar Usuário</h3>
-      <label>E-mail
-        <input id="inviteEmail" type="email" required placeholder="email@dominio.com" />
-      </label>
-      <label>Função
-        <select id="inviteRole">
-          <option value="LEITOR">LEITOR</option>
-          <option value="EDITOR">EDITOR</option>
-          <option value="ADMIN">ADMIN</option>
-        </select>
-      </label>
-      <menu class="dialog-actions">
-        <button type="button" id="inviteCancelBtn" class="btn light">Cancelar</button>
-        <button type="submit" class="btn soft">Enviar Convite</button>
       </menu>
     </form>
   </dialog>
@@ -613,8 +649,18 @@
         <label>Festival / Prêmio
           <input id="routeItemName" required />
         </label>
+        <label>Tipo
+          <select id="routeItemType">
+            <option value="">—</option>
+            <option value="FESTIVAL">Festival</option>
+            <option value="PRÊMIO">Prêmio</option>
+          </select>
+        </label>
         <label>Status
           <select id="routeItemStatus"></select>
+        </label>
+        <label>Valor de Inscrição (R$)
+          <input id="routeItemFee" type="text" inputmode="decimal" placeholder="R$ 0,00" />
         </label>
         <label>País
           <input id="routeItemCountry" />
@@ -769,6 +815,16 @@
         <button type="submit" class="btn accent">Salvar Etapa</button>
       </menu>
     </form>
+  </dialog>
+
+  <dialog id="routeInfoDialog">
+    <div class="route-info-header">
+      <h3 id="routeInfoTitle"></h3>
+      <button id="btnCloseRouteInfo" class="btn light icon-btn" type="button" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="routeInfoBody" class="route-info-body"></div>
   </dialog>
 
   <script src="config.js"></script>
