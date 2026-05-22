@@ -1185,8 +1185,8 @@ textarea {
 
 /* ── Horizontal Bar Chart (hbar) ── */
 .hbar-row {
-  display: grid;
-  grid-template-columns: 130px 1fr 44px;
+  display: grid !important;
+  grid-template-columns: 180px 1fr 40px !important;
   align-items: center;
   gap: 10px;
   margin-bottom: 8px;
@@ -1197,11 +1197,13 @@ textarea {
 }
 
 .hbar-label {
-  font-size: 0.75rem;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 0.75rem !important;
+  color: var(--text) !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  width: 180px !important;
+  min-width: 0;
 }
 
 .hbar-track {
