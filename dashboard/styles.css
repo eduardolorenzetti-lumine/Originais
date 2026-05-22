@@ -241,19 +241,24 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
   position: relative;
+}
+
+.login-submit-btn .btn-label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .btn-spinner {
   display: none;
+  position: absolute;
+  right: 14px;
   width: 14px;
   height: 14px;
   border: 2px solid rgba(0, 0, 0, 0.20);
   border-top-color: var(--black);
   border-radius: 50%;
   animation: auth-spin 0.65s linear infinite;
-  flex-shrink: 0;
 }
 
 .login-form.is-processing .login-submit-btn .btn-spinner {
