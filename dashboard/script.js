@@ -1915,7 +1915,7 @@ function renderDashboard() {
     renderHorizontalBarChart(document.getElementById("chartByStatus"), countBy(projects, (p) => getProjectField(p, "status"), true), getConfigColors("statuses"));
     renderTileChart(document.getElementById("chartByCategory"), countBy(projects, categoryPicker, true), getConfigColors("categories"));
     renderColoredBarChart(document.getElementById("chartByFormat"), countBy(projects, formatPicker, true), getConfigColors("formats"));
-    renderTileChart(document.getElementById("chartByNature"), countBy(projects, naturePicker, true), getConfigColors("natures"));
+    renderHorizontalBarChart(document.getElementById("chartByNature"), countBy(projects, naturePicker, true), getConfigColors("natures"));
     renderHorizontalBarChart(document.getElementById("chartByDuration"), countBy(projects, durationPicker, true), getConfigColors("durations"));
     renderBarChart(document.getElementById("chartShortDocsSpent"), { "Short doc": shortDocSpentTotal }, "vertical", ["#64748b"], (value) => money(value));
     renderAvgStageDonut(document.getElementById("chartAvgStage"), avgMonthsByStage(projects));
@@ -2007,9 +2007,12 @@ function renderRouteDashboard() {
   const isDestaque = (s) => isPremiado(s) || isNomeado(s) || isSelecionado(s);
   renderRouteTop5(allRouteItems, isDestaque);
 
-  // Mapa mundial de premiações
-  const premiadosItems = allRouteItems.filter((item) => isPremiado(String(item.status || "")));
-  renderWorldMap(document.getElementById("routeWorldMap"), premiadosItems);
+  // Mapa mundial — PREMIADO + NOMEADO + SELECIONADO
+  const mapItems = allRouteItems.filter((item) => {
+    const s = String(item.status || "");
+    return isPremiado(s) || isNomeado(s) || isSelecionado(s);
+  });
+  renderWorldMap(document.getElementById("routeWorldMap"), mapItems);
 }
 
 function renderRouteTop5(allRouteItems, filterFn) {
@@ -5670,9 +5673,10 @@ function renderFinanceiro(container, projects) {
 
   container.innerHTML = `
     <div class="financeiro-wrap">
-      <div class="financeiro-left">
-        <div class="fin-total-row">
+      <div class="financeiro-header">
+        <div class="fin-total-section">
           <span class="fin-total-value">${moneyK(totalSpent)}</span>
+          <div class="fin-total-sub">Investimento Total</div>
         </div>
         <div class="fin-breakdown">
           <div class="fin-bd-item">
@@ -5688,20 +5692,20 @@ function renderFinanceiro(container, projects) {
             <div class="fin-bd-value">${moneyK(totalOther)}</div>
           </div>
         </div>
-        <div class="fin-stack-bar-wrap">
-          <div class="fin-stack-labels">
-            <div class="fin-stack-label"><div class="fin-stack-dot" style="background:#111111"></div>Produção ${pctProd}%</div>
-            <div class="fin-stack-label"><div class="fin-stack-dot" style="background:#f3ba00"></div>Equipe ${pctTeam}%</div>
-            <div class="fin-stack-label"><div class="fin-stack-dot" style="background:#d1d5db"></div>Outros ${pctOther}%</div>
-          </div>
-          <div class="fin-stack-bar">
-            ${pctProd  > 0 ? `<div class="fin-stack-seg" style="width:${pctProd}%;background:#111111"></div>` : ""}
-            ${pctTeam  > 0 ? `<div class="fin-stack-seg" style="width:${pctTeam}%;background:#f3ba00;animation-delay:0.06s"></div>` : ""}
-            ${pctOther > 0 ? `<div class="fin-stack-seg" style="width:${pctOther}%;background:#d1d5db;animation-delay:0.12s"></div>` : ""}
-          </div>
+      </div>
+      <div class="fin-stack-bar-wrap">
+        <div class="fin-stack-bar">
+          ${pctProd  > 0 ? `<div class="fin-stack-seg" style="width:${pctProd}%;background:#111111"></div>` : ""}
+          ${pctTeam  > 0 ? `<div class="fin-stack-seg" style="width:${pctTeam}%;background:#f3ba00;animation-delay:0.06s"></div>` : ""}
+          ${pctOther > 0 ? `<div class="fin-stack-seg" style="width:${pctOther}%;background:#d1d5db;animation-delay:0.12s"></div>` : ""}
+        </div>
+        <div class="fin-stack-labels">
+          <div class="fin-stack-label"><div class="fin-stack-dot" style="background:#111111"></div>Produção ${pctProd}%</div>
+          <div class="fin-stack-label"><div class="fin-stack-dot" style="background:#f3ba00"></div>Equipe ${pctTeam}%</div>
+          <div class="fin-stack-label"><div class="fin-stack-dot" style="background:#d1d5db"></div>Outros ${pctOther}%</div>
         </div>
       </div>
-      <div class="financeiro-right">
+      <div>
         <div class="fin-top-title">Top Projetos</div>
         <div class="fin-top-list">${topHtml}</div>
       </div>
@@ -5805,9 +5809,11 @@ function buildCountryPopupHtml(country, items) {
   Object.entries(byProject).forEach(([projectId, projItems]) => {
     const proj = (state.projects || []).find((p) => p.id === projectId);
     const title = proj ? (proj.title || "Sem título") : "Projeto desconhecido";
-    const prizes = projItems.map((i) =>
-      `<div class="map-popup-prize">${escapeHtml(i.name || "Prêmio não identificado")}</div>`
-    ).join("");
+    const prizes = projItems.map((i) => {
+      const statusRaw = String(i.status || "").trim();
+      const icon = /premi/i.test(statusRaw) ? "🏆" : /nomin|nomeado/i.test(statusRaw) ? "🎖️" : "⭐";
+      return `<div class="map-popup-prize">${icon} ${escapeHtml(i.name || "Sem nome")}${statusRaw ? ` <span class="map-popup-status">(${escapeHtml(statusRaw)})</span>` : ""}</div>`;
+    }).join("");
     html += `<div class="map-popup-film">
       <div class="map-popup-film-title">${escapeHtml(title)}</div>
       ${prizes}

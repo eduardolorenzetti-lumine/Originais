@@ -3347,21 +3347,39 @@ textarea:focus,
    ═══════════════════════════════════════════════════════════════════ */
 
 .financeiro-wrap {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
-}
-
-.financeiro-left {
-  padding: 4px 24px 4px 0;
-  border-right: 0.5px solid var(--pale);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+  width: 100%;
+}
+
+.financeiro-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.fin-total-section {
+  flex-shrink: 0;
+}
+
+.fin-total-sub {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+/* Keep .financeiro-left / .financeiro-right in case old HTML references them */
+.financeiro-left {
+  display: contents;
 }
 
 .financeiro-right {
-  padding: 4px 0 4px 24px;
+  display: contents;
 }
 
 /* Cabeçalho: total + ano + comparativo */
@@ -3401,9 +3419,11 @@ textarea:focus,
 
 /* Breakdowns (PRODUÇÃO / EQUIPE / OUTROS) */
 .fin-breakdown {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  flex: 1;
+  align-items: flex-start;
 }
 
 .fin-bd-item {}
@@ -3554,6 +3574,16 @@ textarea:focus,
 .jvm-container {
   background: transparent !important;
   font-family: inherit !important;
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  inset: 0 !important;
+}
+
+.route-world-map .jvm-container svg {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
 }
 
 .jvm-tooltip {
@@ -3656,7 +3686,7 @@ textarea:focus,
   flex: 1 1 calc(50% - 4px);
   min-width: 72px;
   border-radius: 8px;
-  border: 0.5px solid var(--pale);
+  border: 0.5px solid color-mix(in srgb, var(--pale) 45%, transparent);
   padding: 12px 10px;
   display: flex;
   flex-direction: column;
