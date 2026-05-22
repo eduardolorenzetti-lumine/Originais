@@ -1913,9 +1913,9 @@ function renderDashboard() {
 
     renderColoredBarChart(document.getElementById("chartByYear"), countByYearWithMissing(projects));
     renderHorizontalBarChart(document.getElementById("chartByStatus"), countBy(projects, (p) => getProjectField(p, "status"), true), getConfigColors("statuses"));
-    renderHorizontalBarChart(document.getElementById("chartByCategory"), countBy(projects, categoryPicker, true), getConfigColors("categories"));
-    renderHorizontalBarChart(document.getElementById("chartByFormat"), countBy(projects, formatPicker, true), getConfigColors("formats"));
-    renderHorizontalBarChart(document.getElementById("chartByNature"), countBy(projects, naturePicker, true), getConfigColors("natures"));
+    renderTileChart(document.getElementById("chartByCategory"), countBy(projects, categoryPicker, true), getConfigColors("categories"));
+    renderTileChart(document.getElementById("chartByFormat"), countBy(projects, formatPicker, true), getConfigColors("formats"));
+    renderTileChart(document.getElementById("chartByNature"), countBy(projects, naturePicker, true), getConfigColors("natures"));
     renderHorizontalBarChart(document.getElementById("chartByDuration"), countBy(projects, durationPicker, true), getConfigColors("durations"));
     renderBarChart(document.getElementById("chartShortDocsSpent"), { "Short doc": shortDocSpentTotal }, "vertical", ["#64748b"], (value) => money(value));
     renderAvgStageDonut(document.getElementById("chartAvgStage"), avgMonthsByStage(projects));
@@ -4561,6 +4561,7 @@ function openRouteItemDialog(routeItemId = null, forcedProjectId = "") {
   document.getElementById("routeItemDialogTitle").textContent = item ? "Editar Festival / Prêmio" : "Novo Festival / Prêmio";
   document.getElementById("routeItemProjectLabel").textContent = selectedProject ? getRouteProjectLabel(selectedProject) : "";
   document.getElementById("routeItemId").value = item?.id || uid();
+  initCountriesDatalist();
   document.getElementById("routeProjectId").value = selectedProjectId;
   document.getElementById("routeItemName").value = item?.name || "";
   document.getElementById("routeItemType").value = item?.type || "";
@@ -4601,6 +4602,12 @@ function collectRouteItemForm() {
   };
   if (!validateUrl(noticeUrl, "Edital")) return null;
   if (!validateUrl(driveUrl, "Drive / URL")) return null;
+  const countryValue = String(document.getElementById("routeItemCountry").value || "").trim();
+  if (countryValue && !isValidCountry(countryValue)) {
+    alert("País inválido. Por favor, selecione um país da lista.");
+    document.getElementById("routeItemCountry").focus();
+    return null;
+  }
   const rawFee = String(document.getElementById("routeItemFee").value || "").trim();
   const fee = rawFee ? parseCurrencyInputBRL(rawFee) : null;
   return {
@@ -4610,7 +4617,7 @@ function collectRouteItemForm() {
     type: document.getElementById("routeItemType").value || "",
     fee: fee != null && !isNaN(fee) ? fee : null,
     status: document.getElementById("routeItemStatus").value,
-    country: String(document.getElementById("routeItemCountry").value || "").trim(),
+    country: countryValue,
     submissionDeadline: deadline,
     resultDate,
     exclusivity: document.getElementById("routeItemExclusivity").value,
@@ -5501,6 +5508,25 @@ function renderDonutChart(container, map) {
   container.innerHTML = `<div class="chart-donut-wrap"><div class="donut" style="background: conic-gradient(${slices})"></div><ul class="legend">${legend}</ul></div>`;
 }
 
+// ── Tile Chart (Categoria, Formato, Natureza — cartões com número) ──
+function renderTileChart(container, map, palette = []) {
+  if (!container) return;
+  const entries = Object.entries(map).sort((a, b) => Number(b[1]) - Number(a[1]));
+  if (!entries.length) { container.innerHTML = '<div class="empty">Sem dados.</div>'; return; }
+
+  // Alterna entre dark e default (sem cor de fundo, só borda)
+  const tileStyles = ["tile-dark", "", "tile-dark", ""];
+
+  container.innerHTML = entries.map(([label, value], idx) => {
+    const cls = tileStyles[idx % tileStyles.length];
+    const delay = `${idx * 0.06}s`;
+    return `<div class="tile-card ${cls}" style="animation-delay:${delay}">
+      <div class="tile-num">${value}</div>
+      <div class="tile-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+    </div>`;
+  }).join("");
+}
+
 // ── Barras coloridas verticais (Produções por Ano) ──
 function renderColoredBarChart(container, map) {
   if (!container) return;
@@ -5590,7 +5616,6 @@ function renderAvgStageDonut(container, map) {
 function renderFinanceiro(container, projects) {
   if (!container) return;
 
-  // Calcular totais do conjunto filtrado
   const { regularSpent } = getDashboardSpentCollections(projects);
   const totalSpent = regularSpent.reduce((a, i) => a + i.value, 0);
   const totalProd  = regularSpent.reduce((a, i) => a + i.production, 0);
@@ -5602,41 +5627,11 @@ function renderFinanceiro(container, projects) {
     return;
   }
 
-  // Ano corrente selecionado (ou o mais recente com dados)
-  let currentYear = null;
-  if (selectedDashboardYears.size === 1) {
-    currentYear = [...selectedDashboardYears][0];
-  } else {
-    const years = regularSpent.map((i) => getProjectYear(i.p)).filter(Boolean).sort((a, b) => b - a);
-    if (years.length) currentYear = years[0];
-  }
-
-  // Totais do ano anterior para comparativo
-  let prevYearTotal = 0;
-  if (currentYear) {
-    const allProjects = state.projects || [];
-    const prevY = Number(currentYear) - 1;
-    prevYearTotal = allProjects
-      .filter((p) => Number(getProjectYear(p)) === prevY)
-      .reduce((acc, p) => acc + (getProjectSpentValue(p) || 0), 0);
-  }
-
   const moneyK = (v) => {
     if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(1).replace(".", ",")}M`;
     if (v >= 1_000)     return `R$ ${Math.round(v / 1_000)}k`;
     return money(v);
   };
-
-  const deltaClass = (d) => d > 0 ? "up" : d < 0 ? "down" : "flat";
-  const deltaArrow = (d) => d > 0 ? "↑" : d < 0 ? "↓" : "=";
-
-  // Delta total vs ano anterior
-  const diff = prevYearTotal > 0 ? totalSpent - prevYearTotal : null;
-  const diffPct = diff !== null && prevYearTotal > 0 ? Math.round((diff / prevYearTotal) * 100) : null;
-
-  const deltaHtml = diff !== null
-    ? `<span class="fin-delta ${deltaClass(diff)}">${deltaArrow(diff)} ${moneyK(Math.abs(diff))} vs ${Number(currentYear) - 1}</span>`
-    : "";
 
   // Percentuais para barra empilhada
   const pctProd  = totalSpent > 0 ? Math.round((totalProd  / totalSpent) * 100) : 0;
@@ -5644,14 +5639,12 @@ function renderFinanceiro(container, projects) {
   const pctOther = Math.max(100 - pctProd - pctTeam, 0);
 
   // Top 5 projetos por investimento
-  const top5 = regularSpent
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 5);
+  const top5 = [...regularSpent].sort((a, b) => b.value - a.value).slice(0, 5);
   const maxTop = top5.length ? top5[0].value : 1;
 
   const topHtml = top5.map(({ p, value }, idx) => {
     const pct = Math.max((value / maxTop) * 100, 2);
-    const barColor = idx === 0 ? "#f3ba00" : idx === 1 ? "#111111" : idx === 2 ? "#3b82f6" : "#94a3b8";
+    const barColor = idx === 0 ? "#111111" : idx === 1 ? "#f3ba00" : "#94a3b8";
     const delay = `${idx * 0.07}s`;
     return `<div class="fin-top-item" style="animation-delay:${delay}">
       <div class="fin-top-info">
@@ -5667,18 +5660,13 @@ function renderFinanceiro(container, projects) {
   container.innerHTML = `
     <div class="financeiro-wrap">
       <div class="financeiro-left">
-        <div>
-          <div class="fin-total-row">
-            <span class="fin-total-value">${moneyK(totalSpent)}</span>
-            ${currentYear ? `<span class="fin-total-year">${currentYear}</span>` : ""}
-            ${deltaHtml}
-          </div>
+        <div class="fin-total-row">
+          <span class="fin-total-value">${moneyK(totalSpent)}</span>
         </div>
         <div class="fin-breakdown">
           <div class="fin-bd-item">
             <div class="fin-bd-label">Produção</div>
             <div class="fin-bd-value">${moneyK(totalProd)}</div>
-            ${diffPct !== null ? `<div class="fin-bd-delta ${deltaClass(diff)}">${deltaArrow(diff)} ${Math.abs(diffPct)}%</div>` : ""}
           </div>
           <div class="fin-bd-item">
             <div class="fin-bd-label">Equipe</div>
@@ -5796,7 +5784,7 @@ function renderWorldMap(container, premiadosItems) {
   premiadosItems.forEach((item) => {
     const c = String(item.country || "").trim();
     if (!c) return;
-    byCountry[c] = (byCountry[c] || []);
+    if (!byCountry[c]) byCountry[c] = [];
     byCountry[c].push(item);
   });
 
@@ -5809,11 +5797,49 @@ function renderWorldMap(container, premiadosItems) {
   });
   _worldMapInstance = map;
 
-  // Tile layer CartoDB light (sem API key)
   L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
     maxZoom: 18,
     subdomains: "abcd",
   }).addTo(map);
+
+  // Função para montar popup detalhado por país
+  function buildCountryPopup(country, items) {
+    // Agrupar por projeto
+    const byProject = {};
+    items.forEach((item) => {
+      if (!byProject[item.projectId]) byProject[item.projectId] = [];
+      byProject[item.projectId].push(item);
+    });
+
+    const totalPrizes = items.length;
+    let html = `<div class="map-popup-country">${escapeHtml(country)} · ${totalPrizes} prêmio${totalPrizes !== 1 ? "s" : ""}</div>`;
+
+    Object.entries(byProject).forEach(([projectId, projItems]) => {
+      const proj = (state.projects || []).find((p) => p.id === projectId);
+      const title = proj ? (proj.title || "Sem título") : "Projeto desconhecido";
+      const prizes = projItems
+        .map((i) => `<div class="map-popup-prize">${escapeHtml(i.name || "Prêmio não identificado")}</div>`)
+        .join("");
+      html += `<div class="map-popup-film">
+        <div class="map-popup-film-title">${escapeHtml(title)}</div>
+        ${prizes}
+      </div>`;
+    });
+
+    return html;
+  }
+
+  // Ícone troféu como DivIcon
+  function trophyIcon(count) {
+    const multi = count > 1 ? " map-trophy-pin-multi" : "";
+    return L.divIcon({
+      html: `<div class="map-trophy-pin${multi}" title="${count} prêmio${count !== 1 ? "s" : ""}">🏆</div>`,
+      className: "",
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+      popupAnchor: [0, -18],
+    });
+  }
 
   // Adicionar pins
   let hasMarkers = false;
@@ -5821,27 +5847,11 @@ function renderWorldMap(container, premiadosItems) {
     const coords = getCountryCoords(country);
     if (!coords) return;
     hasMarkers = true;
-    const count = items.length;
-    const radius = Math.min(6 + count * 3, 22);
-    const marker = L.circleMarker(coords, {
-      radius,
-      fillColor: "#f3ba00",
-      color: "#111111",
-      weight: 1.5,
-      opacity: 1,
-      fillOpacity: 0.85,
-    }).addTo(map);
-
-    const projectNames = [...new Set(items.map((i) => {
-      const proj = (state.projects || []).find((p) => p.id === i.projectId);
-      return proj ? (proj.title || "Sem título") : null;
-    }).filter(Boolean))].slice(0, 5).join("<br>");
-
-    marker.bindPopup(`
-      <div class="map-pin-popup-title">${escapeHtml(country)}</div>
-      <div class="map-pin-popup-count">${count} prêmio${count !== 1 ? "s" : ""}</div>
-      ${projectNames ? `<div style="margin-top:4px;font-size:0.72rem;color:var(--muted)">${projectNames}</div>` : ""}
-    `);
+    const marker = L.marker(coords, { icon: trophyIcon(items.length) }).addTo(map);
+    marker.bindPopup(buildCountryPopup(country, items), {
+      maxWidth: 260,
+      maxHeight: 300,
+    });
   });
 
   if (!hasMarkers) {
@@ -5856,6 +5866,23 @@ function renderWorldMap(container, premiadosItems) {
 
   // Fit bounds se houver markers
   setTimeout(() => { try { map.invalidateSize(); } catch(e) {} }, 100);
+}
+
+// ── Lista canônica de países (para datalist + validação) ──
+const WORLD_COUNTRIES_PT = [
+  "Afeganistão","África do Sul","Albânia","Alemanha","Andorra","Angola","Antígua e Barbuda","Arábia Saudita","Argélia","Argentina","Armênia","Austrália","Áustria","Azerbaijão","Bahamas","Bangladesh","Barbados","Barein","Bélgica","Belize","Benin","Bielorrússia","Bolívia","Bósnia e Herzegovina","Botsuana","Brasil","Brunei","Bulgária","Burquina Faso","Burundi","Butão","Cabo Verde","Camarões","Camboja","Canadá","Catar","Cazaquistão","Chade","Chile","China","Chipre","Colômbia","Comores","Congo","Coreia do Norte","Coreia do Sul","Costa do Marfim","Costa Rica","Croácia","Cuba","Dinamarca","Djibuti","Dominica","Egito","El Salvador","Emirados Árabes Unidos","Equador","Eritreia","Eslováquia","Eslovênia","Espanha","Estados Unidos","Estônia","Etiópia","Fiji","Filipinas","Finlândia","França","Gabão","Gâmbia","Gana","Geórgia","Granada","Grécia","Guatemala","Guiana","Guiné","Guiné-Bissau","Guiné Equatorial","Haiti","Honduras","Hungria","Iêmen","Ilhas Marshall","Ilhas Salomão","Índia","Indonésia","Irã","Iraque","Irlanda","Islândia","Israel","Itália","Jamaica","Japão","Jordânia","Kuwait","Laos","Lesoto","Letônia","Líbano","Libéria","Líbia","Liechtenstein","Lituânia","Luxemburgo","Madagascar","Malásia","Malaui","Maldivas","Mali","Malta","Marrocos","Maurício","Mauritânia","México","Micronésia","Mianmar","Moçambique","Moldávia","Mônaco","Mongólia","Montenegro","Namíbia","Nauru","Nepal","Nicarágua","Níger","Nigéria","Noruega","Nova Zelândia","Omã","Países Baixos","Palau","Palestina","Panamá","Papua-Nova Guiné","Paquistão","Paraguai","Peru","Polônia","Portugal","Quênia","Quirguistão","Reino Unido","República Centro-Africana","República Democrática do Congo","República Dominicana","República Tcheca","Romênia","Ruanda","Rússia","Samoa","San Marino","Santa Lúcia","São Cristóvão e Névis","São Tomé e Príncipe","São Vicente e Granadinas","Senegal","Serra Leoa","Sérvia","Seicheles","Singapura","Síria","Somália","Sri Lanka","Suazilândia","Sudão","Sudão do Sul","Suécia","Suíça","Suriname","Tailândia","Tanzânia","Tajiquistão","Timor-Leste","Togo","Tonga","Trinidad e Tobago","Tunísia","Turcomenistão","Turquia","Tuvalu","Ucrânia","Uganda","Uruguai","Uzbequistão","Vanuatu","Vaticano","Venezuela","Vietnã","Zâmbia","Zimbábue"
+];
+
+function initCountriesDatalist() {
+  const dl = document.getElementById("countriesList");
+  if (!dl) return;
+  dl.innerHTML = WORLD_COUNTRIES_PT.map((c) => `<option value="${escapeHtml(c)}">`).join("");
+}
+
+function isValidCountry(value) {
+  if (!value) return true; // campo opcional
+  const norm = value.trim().toLowerCase();
+  return WORLD_COUNTRIES_PT.some((c) => c.toLowerCase() === norm);
 }
 
 // Horizontal bar chart com labels e valores compactos (para status/categoria/etc.)
