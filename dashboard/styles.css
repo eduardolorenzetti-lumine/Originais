@@ -41,6 +41,21 @@
   --stage-ghost-text: #dbeafe;
   --modal-backdrop: rgba(2, 6, 23, 0.72);
   --month-width: 46px;
+
+  /* ── Lumine Design System vars — dark overrides ──
+     These override the fixed values from lumine-design-system.css
+     so that all components using --black, --white, --pale, etc.
+     adapt automatically to dark mode.                          */
+  --black:     #f5f7fa;
+  --dark:      #d1d5db;
+  --mid:       #a3a9b3;
+  --light:     #4b5563;
+  --pale:      rgba(255, 255, 255, 0.10);
+  --off-white: #0f1115;
+  --white:     #161a21;
+  --yellow:    #f2b705;
+  --yellow-dark: #c99104;
+  --yellow-pale: rgba(242, 183, 5, 0.15);
 }
 
 :root,
