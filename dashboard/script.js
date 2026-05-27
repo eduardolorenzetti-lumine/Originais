@@ -5652,13 +5652,19 @@ function renderFinanceiro(container, projects) {
   const pctTeam  = totalSpent > 0 ? Math.round((totalTeam  / totalSpent) * 100) : 0;
   const pctOther = Math.max(100 - pctProd - pctTeam, 0);
 
+  // Cores adaptáveis ao tema
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  const colorProd  = isDark ? "#d1d5db" : "#111111";
+  const colorOther = isDark ? "#4b5563" : "#d1d5db";
+
   // Top 5 projetos por investimento
   const top5 = [...regularSpent].sort((a, b) => b.value - a.value).slice(0, 5);
   const maxTop = top5.length ? top5[0].value : 1;
 
+  const topBarFirst = isDark ? "#d1d5db" : "#111111";
   const topHtml = top5.map(({ p, value }, idx) => {
     const pct = Math.max((value / maxTop) * 100, 2);
-    const barColor = idx === 0 ? "#111111" : idx === 1 ? "#f3ba00" : "#94a3b8";
+    const barColor = idx === 0 ? topBarFirst : idx === 1 ? "#f3ba00" : "#94a3b8";
     const delay = `${idx * 0.07}s`;
     return `<div class="fin-top-item" style="animation-delay:${delay}">
       <div class="fin-top-info">
@@ -5695,14 +5701,14 @@ function renderFinanceiro(container, projects) {
       </div>
       <div class="fin-stack-bar-wrap">
         <div class="fin-stack-bar">
-          ${pctProd  > 0 ? `<div class="fin-stack-seg" style="width:${pctProd}%;background:#111111"></div>` : ""}
+          ${pctProd  > 0 ? `<div class="fin-stack-seg" style="width:${pctProd}%;background:${colorProd}"></div>` : ""}
           ${pctTeam  > 0 ? `<div class="fin-stack-seg" style="width:${pctTeam}%;background:#f3ba00;animation-delay:0.06s"></div>` : ""}
-          ${pctOther > 0 ? `<div class="fin-stack-seg" style="width:${pctOther}%;background:#d1d5db;animation-delay:0.12s"></div>` : ""}
+          ${pctOther > 0 ? `<div class="fin-stack-seg" style="width:${pctOther}%;background:${colorOther};animation-delay:0.12s"></div>` : ""}
         </div>
         <div class="fin-stack-labels">
-          <div class="fin-stack-label"><div class="fin-stack-dot" style="background:#111111"></div>Produção ${pctProd}%</div>
+          <div class="fin-stack-label"><div class="fin-stack-dot" style="background:${colorProd}"></div>Produção ${pctProd}%</div>
           <div class="fin-stack-label"><div class="fin-stack-dot" style="background:#f3ba00"></div>Equipe ${pctTeam}%</div>
-          <div class="fin-stack-label"><div class="fin-stack-dot" style="background:#d1d5db"></div>Outros ${pctOther}%</div>
+          <div class="fin-stack-label"><div class="fin-stack-dot" style="background:${colorOther}"></div>Outros ${pctOther}%</div>
         </div>
       </div>
       <div>
@@ -5863,20 +5869,26 @@ function renderWorldMap(container, premiadosItems) {
     if (iso) regionValues[iso] = byCountry[country].length;
   });
 
+  const isDarkTheme = document.documentElement.getAttribute("data-theme") === "dark";
+  const mapRegionFill   = isDarkTheme ? "#2a3040" : "#e8eaed";
+  const mapRegionStroke = isDarkTheme ? "#161a21" : "#ffffff";
+  const mapRegionHover  = isDarkTheme ? "#363d52" : "#d0d4db";
+  const mapMarkerStroke = isDarkTheme ? "#f5f7fa" : "#111111";
+
   const mapOpts = {
     map: "world",
     selector: container,
     backgroundColor: "transparent",
     zoomButtons: false,
     regionStyle: {
-      initial:  { fill: "#e8eaed", stroke: "#fff", strokeWidth: 0.4 },
-      hover:    { fill: "#d0d4db", cursor: "default" },
+      initial:  { fill: mapRegionFill, stroke: mapRegionStroke, strokeWidth: 0.4 },
+      hover:    { fill: mapRegionHover, cursor: "default" },
       selected: { fill: "#f3ba00" },
     },
     markers,
     markerStyle: {
-      initial: { fill: "#f3ba00", stroke: "#111111", strokeWidth: 1.5, r: 7 },
-      hover:   { fill: "#f3ba00", stroke: "#111111", r: 9, cursor: "pointer" },
+      initial: { fill: "#f3ba00", stroke: mapMarkerStroke, strokeWidth: 1.5, r: 7 },
+      hover:   { fill: "#f3ba00", stroke: mapMarkerStroke, r: 9, cursor: "pointer" },
     },
     onMarkerClick(e, idx) {
       const country = markerCountryMap[idx];
@@ -5909,7 +5921,7 @@ function renderWorldMap(container, premiadosItems) {
     mapOpts.series = {
       regions: [{
         attribute: "fill",
-        scale: { min: "#fef3c7", max: "#f3ba00" },
+        scale: { min: isDarkTheme ? "#5a4200" : "#fef3c7", max: "#f3ba00" },
         values: regionValues,
         normalizeFunction: "polynomial",
       }],

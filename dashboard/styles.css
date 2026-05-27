@@ -3696,8 +3696,8 @@ textarea:focus,
 }
 
 .tile-card.tile-dark {
-  background: var(--text);
-  border-color: var(--text);
+  background: #0d0d0d;
+  border-color: #0d0d0d;
 }
 
 .tile-card.tile-yellow {
