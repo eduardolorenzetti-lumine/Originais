@@ -645,6 +645,7 @@ textarea {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  cursor: default !important;  /* cards não são clicáveis */
 }
 
 .stat-card .metric-icon {

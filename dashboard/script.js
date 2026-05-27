@@ -5935,6 +5935,16 @@ function renderWorldMap(container, premiadosItems) {
     return;
   }
 
+  // Força o SVG a preencher todo o container (jsvectormap define dimensões inline)
+  const mapSvg = container.querySelector("svg");
+  if (mapSvg) {
+    mapSvg.setAttribute("width", "100%");
+    mapSvg.setAttribute("height", "100%");
+    mapSvg.style.setProperty("width",  "100%", "important");
+    mapSvg.style.setProperty("height", "100%", "important");
+    mapSvg.style.setProperty("display", "block", "important");
+  }
+
   // Fechar popup ao clicar no mapa
   container.addEventListener("click", (e) => {
     if (!e.target.closest(".map-custom-popup") && !e.target.closest(".jvm-marker")) {
