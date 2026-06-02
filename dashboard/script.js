@@ -373,6 +373,9 @@ function restoreCurrentTab() {
 async function init() {
   const pendingAuthCallback = isRemoteSupabaseAuthEnabled() && hasPendingSupabaseAuthCallback();
   state = loadState();
+  // Garante que a tela de login apareça imediatamente se o usuário não estiver logado,
+  // mesmo que passos assíncronos posteriores falhem (ex: IndexedDB em file://).
+  if (!isRemoteSupabaseAuthEnabled()) applyAuthVisibility();
   const beforeHydrate = JSON.stringify(state);
   state = await hydrateStateFromIndexedDb(state);
   state = await withTimeout(
