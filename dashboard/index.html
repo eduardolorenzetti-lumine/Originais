@@ -8,6 +8,7 @@
   <link rel="icon" type="image/png" href="assets/images/lumine-favicon.png" />
   <link rel="stylesheet" href="lumine-design-system.css" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/css/jsvectormap.min.css" />
 </head>
 <body>
 
@@ -31,14 +32,14 @@
       <div class="login-brand">
         <img src="assets/images/luminstudios-logoblack.png" alt="Lumine Studios" class="login-logo-img" />
       </div>
-      <form id="recoveryForm" class="login-form" autocomplete="off">
+      <form id="recoveryForm" class="login-form" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other">
         <h3 class="login-form-title">Redefinir senha</h3>
         <p class="login-form-subtitle">Crie uma nova senha para sua conta.</p>
         <label>Nova senha
-          <input id="recoveryPassword" type="text" required minlength="6" autocomplete="off" placeholder="Mínimo 6 caracteres" />
+          <input id="recoveryPassword" type="text" required minlength="6" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" placeholder="Mínimo 6 caracteres" />
         </label>
         <label>Confirmar nova senha
-          <input id="recoveryPasswordConfirm" type="text" required minlength="6" autocomplete="off" />
+          <input id="recoveryPasswordConfirm" type="text" required minlength="6" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
         </label>
         <p id="recoveryError" class="login-error" hidden></p>
         <button type="submit" class="btn accent login-submit-btn">
@@ -54,12 +55,12 @@
       <a href="#" class="login-brand brand-link" data-go-home>
         <img src="assets/images/luminstudios-logoblack.png" alt="Lumine Studios" class="login-logo-img" />
       </a>
-      <form id="loginForm" class="login-form" autocomplete="off">
+      <form id="loginForm" class="login-form" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other">
         <label>E-mail
-          <input id="loginEmail" type="email" required autocomplete="off" />
+          <input id="loginEmail" type="email" required autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
         </label>
         <label>Senha
-          <input id="loginPassword" type="text" required autocomplete="new-password" />
+          <input id="loginPassword" type="text" required autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
         </label>
         <p id="loginStatus" class="login-status" hidden></p>
         <p id="loginError" class="login-error" hidden></p>
@@ -114,15 +115,28 @@
       <section id="dashboard" class="tab active">
         <header class="page-header">
           <div>
-            <div class="dashboard-header-row">
+            <div class="page-title-row">
               <h1 class="page-title">Dashboard</h1>
-              <div id="dashboardViewChips" class="dashboard-view-chips"></div>
+              <div id="dashboardViewTabs" class="view-toggle"></div>
+              <button id="btnExportReport" class="btn light export-report-btn" type="button" title="Exportar relatório em PDF">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z"/></svg>
+                <span>Exportar PDF</span>
+              </button>
             </div>
-            <p class="page-subtitle">Visão geral das suas produções</p>
+            <p class="page-subtitle">Produções | Lumine Studios</p>
           </div>
         </header>
 
-        <div class="dashboard-top-controls">
+        <!-- Cabeçalho que aparece apenas na impressão / PDF -->
+        <div id="printReportHeader" class="print-report-header" aria-hidden="true">
+          <div class="print-report-brand">
+            <span class="print-report-logo">ORIGINAIS <strong>LUMINE</strong></span>
+            <span class="print-report-title" id="printReportTitle">Relatório</span>
+          </div>
+          <div class="print-report-meta" id="printReportMeta"></div>
+        </div>
+
+        <div class="dashboard-top-controls" id="dashboardProdControls">
           <div class="year-inline">
             <strong>ANO:</strong>
             <div id="yearChips" class="chips"></div>
@@ -166,70 +180,168 @@
         </section>
 
         <!-- Seção: Produções -->
-        <div id="projectsDashboardSection">
+        <div id="projectsDashboardSection" class="dash-section">
           <div id="summaryCards" class="summary-cards summary-grid cols-5"></div>
 
+          <div id="activeCrossFilters" class="active-filters" hidden></div>
+
           <div class="dashboard-grid">
-            <article class="card panel wide">
-              <div class="card-header"><span class="card-title">Produções por Ano</span></div>
-              <div class="card-body"><div id="chartByYear" class="chart-bars"></div></div>
+            <!-- Linha 1: Tempo Médio + Produções por Ano + Por Status (3 por linha) -->
+            <article class="card panel">
+              <div class="card-header"><span class="card-title">Tempo Médio por Etapa</span></div>
+              <div class="card-body"><div id="chartAvgStage" class="avg-stage-donut-wrap"></div></div>
             </article>
 
-            <article class="card panel wide">
-              <div class="card-header"><span class="card-title">Tempo Médio por Etapa (meses)</span></div>
-              <div class="card-body"><div id="chartAvgStage" class="chart-bars horizontal"></div></div>
+            <article class="card panel">
+              <div class="card-header"><span class="card-title">Produções por Ano</span></div>
+              <div class="card-body"><div id="chartByYear" class="chart-bars-colored-wrap"></div></div>
             </article>
 
             <article class="card panel">
               <div class="card-header"><span class="card-title">Por Status</span></div>
-              <div class="card-body"><div id="chartByStatus" class="chart-bars"></div></div>
+              <div class="card-body"><div id="chartByStatus" class="chart-bars horizontal"></div></div>
             </article>
 
-            <article class="card panel">
-              <div class="card-header"><span class="card-title">Por Categoria</span></div>
-              <div class="card-body"><div id="chartByCategory" class="chart-bars"></div></div>
-            </article>
-
-            <article class="card panel">
-              <div class="card-header"><span class="card-title">Por Formato</span></div>
-              <div class="card-body"><div id="chartByFormat" class="chart-bars"></div></div>
-            </article>
+            <!-- Linha 2: [Categoria+Formato empilhados] + Natureza + Duração -->
+            <div class="dashboard-col-stack">
+              <article class="card panel panel-in-stack">
+                <div class="card-header"><span class="card-title">Por Categoria</span></div>
+                <div class="card-body"><div id="chartByCategory" class="chart-tiles"></div></div>
+              </article>
+              <article class="card panel panel-in-stack">
+                <div class="card-header"><span class="card-title">Por Formato</span></div>
+                <div class="card-body"><div id="chartByFormat" class="chart-bars-colored-wrap"></div></div>
+              </article>
+            </div>
 
             <article class="card panel">
               <div class="card-header"><span class="card-title">Por Natureza</span></div>
-              <div class="card-body"><div id="chartByNature" class="chart-bars"></div></div>
+              <div class="card-body"><div id="chartByNature" class="chart-bars horizontal"></div></div>
             </article>
 
             <article class="card panel">
               <div class="card-header"><span class="card-title">Por Duração</span></div>
-              <div class="card-body"><div id="chartByDuration" class="chart-bars"></div></div>
+              <div class="card-body"><div id="chartByDuration" class="chart-bars horizontal"></div></div>
             </article>
 
-            <article class="card panel">
+            <!-- Linha 3: FINANCEIRO 50% + Short docs 50% -->
+            <article class="card panel half" id="financeiroPanel">
+              <div class="card-header">
+                <span class="card-title">Financeiro</span>
+                <span class="card-meta-label">total por projeto</span>
+              </div>
+              <div class="card-body"><div id="financeiroContent" class="financeiro-wrap"></div></div>
+            </article>
+
+            <article class="card panel half">
               <div class="card-header"><span class="card-title">Gasto com Short docs</span></div>
               <div class="card-body"><div id="chartShortDocsSpent" class="chart-bars"></div></div>
+            </article>
+
+            <!-- Linha 4: Distribuição 50% + Completude 50% -->
+            <article class="card panel half">
+              <div class="card-header"><span class="card-title">Por Distribuição</span></div>
+              <div class="card-body"><div id="chartByDistribution" class="chart-bars horizontal"></div></div>
+            </article>
+
+            <article class="card panel half" id="dataCompletenessPanel">
+              <div class="card-header">
+                <span class="card-title">Completude dos Dados</span>
+                <span class="card-meta-label" id="dataCompletenessScore"></span>
+              </div>
+              <div class="card-body"><div id="dataCompleteness" class="data-completeness"></div></div>
             </article>
           </div>
         </div>
 
         <!-- Seção: Rota -->
-        <div id="routeDashboardSection">
-          <div id="routeSummaryCards" class="route-summary-cards summary-grid"></div>
-
+        <div id="routeDashboardSection" class="dash-section">
           <div class="dashboard-grid">
             <article class="card panel wide route-highlights-panel">
-              <div class="card-header"><span class="card-title">Premiações</span></div>
+              <div class="card-header">
+                <span class="card-title combo-title"><strong class="combo-title-strong">ROTA</strong><span class="combo-title-sep">|</span><span class="combo-title-soft">Premiações</span></span>
+              </div>
               <div class="card-body"><div id="routeHighlights" class="route-highlights"></div></div>
             </article>
 
-            <article class="card panel">
-              <div class="card-header"><span class="card-title">Inscrições por Status</span></div>
-              <div class="card-body"><div id="chartRouteByStatus" class="chart-bars"></div></div>
+            <div class="awards-toolbar">
+              <div id="premiacoesTypeChips" class="chips"></div>
+              <input id="premiacoesSearch" placeholder="Buscar filme ou festival..." />
+            </div>
+
+            <article class="card panel half">
+              <div class="card-header"><span class="card-title">Conquistas por Ano</span></div>
+              <div class="card-body"><div id="premiacoesByYear" class="chart-bars"></div></div>
             </article>
 
-            <article class="card panel">
-              <div class="card-header"><span class="card-title">Top 5 Destaques</span></div>
-              <div class="card-body"><div id="routeTop5" class="route-top5"></div></div>
+            <article class="card panel half">
+              <div class="card-header"><span class="card-title">Por País</span></div>
+              <div class="card-body"><div id="premiacoesByCountry" class="chart-bars horizontal"></div></div>
+            </article>
+
+            <article class="card panel wide awards-wall-card">
+              <div class="card-header">
+                <span class="card-title">Mural de Conquistas</span>
+                <span class="card-meta-label" id="premiacoesCount"></span>
+              </div>
+              <div class="card-body"><div id="premiacoesWall" class="awards-wall"></div></div>
+            </article>
+
+            <!-- Mapa mundial com pins de prêmios -->
+            <article class="card panel half map-panel">
+              <div class="card-header"><span class="card-title">Mapa de Premiações</span></div>
+              <div class="card-body route-map-body"><div id="routeWorldMap" class="route-world-map"></div></div>
+            </article>
+
+            <article class="card panel half map-panel" style="display:flex;flex-direction:column;gap:0">
+              <article class="card panel" style="border:none;box-shadow:none;border-radius:0;border-bottom:0.5px solid var(--pale)">
+                <div class="card-header"><span class="card-title">Inscrições por Status</span></div>
+                <div class="card-body"><div id="chartRouteByStatus" class="chart-bars"></div></div>
+              </article>
+              <article class="card panel" style="border:none;box-shadow:none;border-radius:0;flex:1">
+                <div class="card-header"><span class="card-title">Top 5 Destaques</span></div>
+                <div class="card-body"><div id="routeTop5" class="route-top5"></div></div>
+              </article>
+            </article>
+          </div>
+        </div>
+
+        <!-- Seção: Comparativos -->
+        <div id="comparativosDashboardSection" class="dash-section" hidden>
+          <article class="card comparador-card">
+            <div class="card-header">
+              <span class="card-title">Comparador Livre</span>
+              <span class="card-meta-label">cruze dois campos</span>
+            </div>
+            <div class="card-body">
+              <div class="comparador-controls">
+                <label>Agrupar por
+                  <select id="comparadorDimension"></select>
+                </label>
+                <label>Métrica
+                  <select id="comparadorMetric"></select>
+                </label>
+              </div>
+              <div id="comparadorChart" class="chart-bars horizontal"></div>
+            </div>
+          </article>
+
+          <div class="dashboard-grid">
+            <article class="card panel half">
+              <div class="card-header"><span class="card-title">Natureza × Taxa de Seleção</span></div>
+              <div class="card-body"><div id="crossNatureSelection" class="chart-bars horizontal"></div></div>
+            </article>
+            <article class="card panel half">
+              <div class="card-header"><span class="card-title">Categoria × Premiações</span></div>
+              <div class="card-body"><div id="crossCategoryAwards" class="chart-bars horizontal"></div></div>
+            </article>
+            <article class="card panel half">
+              <div class="card-header"><span class="card-title">Custo Médio por Duração</span></div>
+              <div class="card-body"><div id="crossDurationCost" class="chart-bars horizontal"></div></div>
+            </article>
+            <article class="card panel half">
+              <div class="card-header"><span class="card-title">Tempo Médio de Produção por Ano</span></div>
+              <div class="card-body"><div id="crossYearStageTime" class="chart-bars"></div></div>
             </article>
           </div>
         </div>
@@ -398,6 +510,7 @@
                 <th>CRT</th>
                 <th>IMDb</th>
                 <th>Status</th>
+                <th>Distribuição</th>
                 <th>Ações</th>
               </tr>
             </thead>
@@ -478,6 +591,14 @@
           <div id="routeSummary" class="route-summary"></div>
         </div>
 
+        <article class="card route-deadlines-panel" id="routeDeadlinesPanel" hidden>
+          <div class="card-header">
+            <span class="card-title">Próximas Submissões</span>
+            <span class="route-deadlines-hint" id="routeDeadlinesHint"></span>
+          </div>
+          <div class="card-body"><div id="routeDeadlines" class="deadline-grid"></div></div>
+        </article>
+
         <div class="table-wrap table-scroll route-table-wrap">
           <table class="table-main">
             <colgroup>
@@ -548,6 +669,8 @@
         <label>Custo de Produção (R$) <input id="projectSpentProduction" type="text" inputmode="decimal" placeholder="R$ 0,00" /></label>
         <label>Cachê de Equipe (R$) <input id="projectSpentTeam" type="text" inputmode="decimal" placeholder="R$ 0,00" /></label>
         <label>Investimento Total <span id="projectSpentTotal" class="spent-total-display">R$ 0,00</span></label>
+        <label>Receita / Retorno (R$) <input id="projectRevenue" type="text" inputmode="decimal" placeholder="R$ 0,00" /></label>
+        <label>Resultado <span id="projectResultDisplay" class="spent-total-display">R$ 0,00</span></label>
         <label>Lançamento
           <div class="release-field-wrap">
             <input id="projectReleaseDateText" class="release-field-text" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" />
@@ -598,7 +721,7 @@
         </label>
         <label>E-mail
           <!-- type="text" evita que browsers interpretem como campo de login e peçam para salvar senha -->
-          <input id="userEmail" type="text" inputmode="email" required autocomplete="off" />
+          <input id="userEmail" type="text" inputmode="email" required autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
         </label>
         <label>Função
           <select id="userRole">
@@ -618,10 +741,10 @@
         <div class="form-grid">
           <label><span id="userPasswordLabelText">Senha provisória</span>
             <!-- type="text" → convertido para "password" via JS para evitar prompt "Salvar Senha" -->
-            <input id="userPassword" type="text" autocomplete="off" minlength="6" placeholder="Mínimo 6 caracteres" />
+            <input id="userPassword" type="text" autocomplete="off" minlength="6" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" placeholder="Mínimo 6 caracteres" />
           </label>
           <label><span id="userPasswordConfirmLabelText">Confirmar senha provisória</span>
-            <input id="userPasswordConfirm" type="text" autocomplete="off" minlength="6" />
+            <input id="userPasswordConfirm" type="text" autocomplete="off" minlength="6" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
           </label>
         </div>
         <p id="userPasswordHint" class="dialog-hint">Defina uma senha provisória para o novo usuário. No primeiro login ele será obrigado a criar uma nova senha.</p>
@@ -657,7 +780,8 @@
           <input id="routeItemFee" type="text" inputmode="decimal" placeholder="R$ 0,00" />
         </label>
         <label>País
-          <input id="routeItemCountry" />
+          <input id="routeItemCountry" list="countriesList" autocomplete="off" placeholder="Selecione um país..." />
+          <datalist id="countriesList"></datalist>
         </label>
         <label>Prazo de inscrição
           <input id="routeItemDeadline" type="date" lang="pt-BR" />
@@ -821,6 +945,33 @@
     <div id="routeInfoBody" class="route-info-body"></div>
   </dialog>
 
+  <dialog id="exportDialog">
+    <div class="route-info-header">
+      <h3>Exportar relatório (PDF)</h3>
+      <button id="btnCloseExport" class="btn light icon-btn" type="button" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <p class="dialog-hint">Escolha o que incluir no relatório. Abrirá a janela de impressão — escolha "Salvar como PDF".</p>
+    <div class="export-scope-options">
+      <button type="button" class="btn light export-scope-btn" data-export-scope="producoes">Produções</button>
+      <button type="button" class="btn light export-scope-btn" data-export-scope="rota">Rota</button>
+      <button type="button" class="btn accent export-scope-btn" data-export-scope="ambos">Ambos</button>
+    </div>
+  </dialog>
+
+  <dialog id="drilldownDialog">
+    <div class="route-info-header">
+      <h3 id="drilldownTitle"></h3>
+      <button id="btnCloseDrilldown" class="btn light icon-btn" type="button" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="drilldownBody" class="drilldown-body"></div>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/maps/world.js"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="seed-data.js"></script>
