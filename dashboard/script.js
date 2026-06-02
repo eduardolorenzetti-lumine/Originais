@@ -801,6 +801,12 @@ function bindAuthActions() {
           return;
         }
       }
+      // Garante que a lista de usuários está carregada antes de checar o e-mail.
+      // Isso evita falsos bloqueios causados por race condition no carregamento inicial.
+      if (!secureUsersLoaded) {
+        const fresh = await fetchSecureUsersFromSupabase();
+        if (fresh && fresh.length > 0) setManagedUsers(fresh, { persist: false });
+      }
       const knownEmails = (state.users || []).map((u) => normalizeUserEmail(u.email));
       if (knownEmails.length && !knownEmails.includes(email)) {
         showLoginError("E-mail não cadastrado no sistema. Entre em contato com o administrador.");
@@ -1810,6 +1816,20 @@ function bindDialog() {
     document.getElementById("routeInfoDialog")?.close();
   });
 
+  document.getElementById("btnCloseDrilldown")?.addEventListener("click", () => {
+    document.getElementById("drilldownDialog")?.close();
+  });
+
+  document.getElementById("btnExportReport")?.addEventListener("click", () => {
+    document.getElementById("exportDialog")?.showModal();
+  });
+  document.getElementById("btnCloseExport")?.addEventListener("click", () => {
+    document.getElementById("exportDialog")?.close();
+  });
+  document.querySelectorAll(".export-scope-btn").forEach((btn) => {
+    btn.addEventListener("click", () => exportReport(btn.dataset.exportScope));
+  });
+
   document.getElementById("btnCancelRouteItem").addEventListener("click", () => routeItemDialog.close());
   document.getElementById("btnDeleteRouteItem").addEventListener("click", () => {
     if (!canEditContent()) {
@@ -1867,10 +1887,12 @@ function renderAll() {
 function renderDashboard() {
   renderDashboardViewTabs();
 
-  const showProducoes = selectedDashboardView !== "rota";
-  const showRota = selectedDashboardView !== "producoes";
+  const view = selectedDashboardView;
+  const showProducoes = view === "todos" || view === "producoes";
+  const showRota = view === "todos" || view === "rota";
+  const showComparativos = view === "todos" || view === "comparativos";
 
-  // Mostrar/ocultar controles de filtro por ano (não relevante para Rota)
+  // Mostrar/ocultar controles de filtro por ano (só relevante para Produções)
   const prodControls = document.getElementById("dashboardProdControls");
   const filtersPanel = document.getElementById("dashboardFiltersPanel");
   if (prodControls) prodControls.hidden = !showProducoes;
@@ -1883,8 +1905,19 @@ function renderDashboard() {
 
   const projectsSection = document.getElementById("projectsDashboardSection");
   const routeSection = document.getElementById("routeDashboardSection");
+  const comparativosSection = document.getElementById("comparativosDashboardSection");
   if (projectsSection) projectsSection.hidden = !showProducoes;
   if (routeSection) routeSection.hidden = !showRota;
+  if (comparativosSection) comparativosSection.hidden = !showComparativos;
+
+  // Marca a primeira seção visível (suprime o divisor de topo dela)
+  let firstVisibleMarked = false;
+  [projectsSection, routeSection, comparativosSection].forEach((sec) => {
+    if (!sec) return;
+    const visible = !sec.hidden;
+    sec.classList.toggle("is-first-visible", visible && !firstVisibleMarked);
+    if (visible) firstVisibleMarked = true;
+  });
 
   if (showProducoes) {
     const allProjects = [...state.projects];
@@ -1911,15 +1944,34 @@ function renderDashboard() {
     const naturePicker = (project) => getNormalizedProjectField(project, "nature", { strict: true });
     const durationPicker = (project) => getNormalizedProjectField(project, "duration", { strict: true });
 
+    const statusPicker = (project) => getNormalizedProjectField(project, "status", { strict: true });
+
     renderColoredBarChart(document.getElementById("chartByYear"), countByYearWithMissing(projects));
-    renderHorizontalBarChart(document.getElementById("chartByStatus"), countBy(projects, (p) => getProjectField(p, "status"), true), getConfigColors("statuses"));
+    renderHorizontalBarChart(document.getElementById("chartByStatus"), countBy(projects, statusPicker, true), getConfigColors("statuses"));
     renderTileChart(document.getElementById("chartByCategory"), countBy(projects, categoryPicker, true), getConfigColors("categories"));
     renderColoredBarChart(document.getElementById("chartByFormat"), countBy(projects, formatPicker, true), getConfigColors("formats"));
     renderHorizontalBarChart(document.getElementById("chartByNature"), countBy(projects, naturePicker, true), getConfigColors("natures"));
     renderHorizontalBarChart(document.getElementById("chartByDuration"), countBy(projects, durationPicker, true), getConfigColors("durations"));
     renderBarChart(document.getElementById("chartShortDocsSpent"), { "Short doc": shortDocSpentTotal }, "vertical", ["#64748b"], (value) => money(value));
+    renderHorizontalBarChart(document.getElementById("chartByDistribution"), countByMulti(projects, getProjectDistributions), getConfigColors("distributions"));
     renderAvgStageDonut(document.getElementById("chartAvgStage"), avgMonthsByStage(projects));
     renderFinanceiro(document.getElementById("financeiroContent"), projects);
+    renderDataCompleteness(projects);
+
+    // Cross-filtering: clicar num segmento ativa/desativa o filtro do dashboard
+    wireCrossFilter(document.getElementById("chartByStatus"), "statuses");
+    wireCrossFilter(document.getElementById("chartByCategory"), "categories");
+    wireCrossFilter(document.getElementById("chartByFormat"), "formats");
+    wireCrossFilter(document.getElementById("chartByNature"), "natures");
+    wireCrossFilter(document.getElementById("chartByDuration"), "durations");
+    wireCrossFilter(document.getElementById("chartByDistribution"), "distributions");
+    wireYearCrossFilter(document.getElementById("chartByYear"));
+    wireStageDonutDrilldown(document.getElementById("chartAvgStage"), projects);
+    renderActiveCrossFilters();
+  }
+
+  if (showComparativos) {
+    renderComparativos();
   }
 
   if (showRota) {
@@ -1933,7 +1985,8 @@ function renderDashboardViewTabs() {
   const options = [
     { value: "todos", label: "Todos" },
     { value: "producoes", label: "Produções" },
-    { value: "rota", label: "Rota" }
+    { value: "rota", label: "Rota" },
+    { value: "comparativos", label: "Comparativos" }
   ];
   container.innerHTML = options
     .map((o) => `<button class="view-toggle-btn ${selectedDashboardView === o.value ? "active" : ""}" data-view="${o.value}">${o.label}</button>`)
@@ -1961,35 +2014,45 @@ function renderRouteDashboard() {
   const nomeados     = countMatch(isNomeado);
   const selecionados = countMatch(isSelecionado);
 
-  // Cards de resumo
-  const summaryEl = document.getElementById("routeSummaryCards");
-  if (summaryEl) {
-    summaryEl.innerHTML = [
-      cardHtml("Filmes na Rota", String(routeProjects.length), "projects"),
-      cardHtml("Total de Inscrições", String(totalEntries), "avg")
-    ].join("");
-  }
+  // Métricas auxiliares
+  const isDestaqueStatus = (s) => isPremiado(s) || isNomeado(s) || isSelecionado(s);
+  const premiacoesTotais = premiados + nomeados + selecionados;
+  const filmesNaRota = routeProjects.length;
+  const finalizadas = (state.projects || []).filter((p) => /conclu/i.test(getProjectField(p, "status"))).length;
+  const pct = (num, den) => (den > 0 ? Math.round((num / den) * 100) : 0);
+  const pctFilmes = pct(filmesNaRota, finalizadas);
+  const pctOfEntries = (n) => pct(n, totalEntries);
 
-  // Destaques / Premiações — clicáveis
+  // Linha unificada: dados de rota + premiações, com indicadores de %
   const highlightsEl = document.getElementById("routeHighlights");
   if (highlightsEl) {
-    highlightsEl.innerHTML = `
-      <div class="route-highlight-item route-highlight-gold" role="button" tabindex="0" data-highlight="premiados">
-        <span class="route-highlight-number">${premiados}</span>
-        <span class="route-highlight-label">Prêmios</span>
-      </div>
-      <div class="route-highlight-item route-highlight-purple" role="button" tabindex="0" data-highlight="nomeados">
-        <span class="route-highlight-number">${nomeados}</span>
-        <span class="route-highlight-label">Nomeações</span>
-      </div>
-      <div class="route-highlight-item route-highlight-blue" role="button" tabindex="0" data-highlight="selecionados">
-        <span class="route-highlight-number">${selecionados}</span>
-        <span class="route-highlight-label">Seleções</span>
-      </div>
-    `;
+    const statTile = ({ number, label, pctLabel, cls, highlight }) => {
+      const clickable = highlight ? ` role="button" tabindex="0" data-highlight="${highlight}"` : "";
+      return `
+        <div class="route-highlight-item ${cls}"${clickable}>
+          <span class="route-highlight-number">${number}</span>
+          <span class="route-highlight-label">${escapeHtml(label)}</span>
+          ${pctLabel ? `<span class="route-highlight-pct">${escapeHtml(pctLabel)}</span>` : ""}
+        </div>`;
+    };
+
+    highlightsEl.innerHTML = [
+      statTile({ number: filmesNaRota, label: "Filmes na Rota", pctLabel: `${pctFilmes}% das finalizadas`, cls: "route-highlight-teal" }),
+      statTile({ number: totalEntries, label: "Total de Inscrições", pctLabel: "", cls: "route-highlight-indigo" }),
+      statTile({ number: premiacoesTotais, label: "Premiações Totais", pctLabel: `${pctOfEntries(premiacoesTotais)}% das inscrições`, cls: "route-highlight-rose", highlight: "todos" }),
+      statTile({ number: premiados, label: "Prêmios", pctLabel: `${pctOfEntries(premiados)}% das inscrições`, cls: "route-highlight-gold", highlight: "premiados" }),
+      statTile({ number: nomeados, label: "Nomeações", pctLabel: `${pctOfEntries(nomeados)}% das inscrições`, cls: "route-highlight-purple", highlight: "nomeados" }),
+      statTile({ number: selecionados, label: "Seleções", pctLabel: `${pctOfEntries(selecionados)}% das inscrições`, cls: "route-highlight-blue", highlight: "selecionados" }),
+    ].join("");
+
     highlightsEl.querySelectorAll("[data-highlight]").forEach((el) => {
       el.addEventListener("click", () => {
         const type = el.dataset.highlight;
+        if (type === "todos") {
+          const matching = allRouteItems.filter((item) => isDestaqueStatus(String(item.status || "")));
+          openRouteInfoByCategory("Premiações", matching);
+          return;
+        }
         const filterFn = type === "premiados" ? isPremiado : type === "nomeados" ? isNomeado : isSelecionado;
         const label = type === "premiados" ? "Prêmios" : type === "nomeados" ? "Nomeações" : "Seleções";
         const matching = allRouteItems.filter((item) => filterFn(String(item.status || "")));
@@ -2013,6 +2076,9 @@ function renderRouteDashboard() {
     return isPremiado(s) || isNomeado(s) || isSelecionado(s);
   });
   renderWorldMap(document.getElementById("routeWorldMap"), mapItems);
+
+  // Quadrantes de conquistas (por ano, por país e mural)
+  renderRouteAchievements();
 }
 
 function renderRouteTop5(allRouteItems, filterFn) {
@@ -2526,6 +2592,14 @@ function getProjectDistributions(project) {
     );
   }
   return [];
+}
+
+function renderDistributionCell(project) {
+  const values = getProjectDistributions(project);
+  if (!values.length) return '<span style="color:#94a3b8">—</span>';
+  return `<div class="dist-tags">${values
+    .map((value) => `<span class="dist-tag">${escapeHtml(value)}</span>`)
+    .join("")}</div>`;
 }
 
 function getProjectInfantilValue(project) {
@@ -3740,7 +3814,7 @@ function renderProjectsTable() {
 
   const body = document.getElementById("projectsTableBody");
   if (!projects.length) {
-    body.innerHTML = '<tr><td colspan="12" class="empty">Nenhum projeto encontrado.</td></tr>';
+    body.innerHTML = '<tr><td colspan="13" class="empty">Nenhum projeto encontrado.</td></tr>';
     return;
   }
 
@@ -3781,6 +3855,7 @@ function renderProjectsTable() {
         <td>${renderFlagCell(p, "infantil")}</td>
         ${PROJECT_FLAG_FIELDS.map((field) => `<td>${renderFlagCell(p, field.key)}</td>`).join("")}
         <td>${editable ? inlineSelect("status", p.id, getProjectField(p, "status"), statuses, badgeClass) : escapeHtml(getProjectField(p, "status") || "—")}</td>
+        <td>${renderDistributionCell(p)}</td>
         <td>
           ${
             editable
@@ -3845,6 +3920,381 @@ function renderProjectsTable() {
   });
 }
 
+// ── Premiações (quadrantes dentro do dashboard de Rota) ──────────────
+let premiacoesFilter = { type: "all", query: "" };
+
+const AWARD_TYPE_META = {
+  premiado:    { label: "Prêmios",   single: "Prêmio",    className: "award-gold",   icon: "🏆" },
+  nomeado:     { label: "Nomeações", single: "Nomeação",  className: "award-purple", icon: "🎖️" },
+  selecionado: { label: "Seleções",  single: "Seleção",   className: "award-blue",   icon: "⭐" },
+};
+
+function classifyAwardStatus(status) {
+  const s = String(status || "");
+  if (/premi/i.test(s)) return "premiado";
+  if (/nomin|nomeado/i.test(s)) return "nomeado";
+  if (/selecio/i.test(s) && !/n[ãa]o\s*selecio|nao\s*selecio/i.test(s)) return "selecionado";
+  return null;
+}
+
+function countryFlagEmoji(countryName) {
+  const iso = COUNTRY_ISO2[String(countryName || "").trim()];
+  if (!iso || iso.length !== 2) return "";
+  return iso.toUpperCase().replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
+}
+
+// Conquistas = itens de rota com status premiado / nomeado / selecionado.
+function getAchievements() {
+  const projectsById = new Map((state.projects || []).map((p) => [p.id, p]));
+  return (state.routes || [])
+    .map((item) => {
+      const type = classifyAwardStatus(item.status);
+      if (!type) return null;
+      const project = projectsById.get(item.projectId);
+      const dateIso = normalizeDateInput(item.resultDate) || "";
+      const year = dateIso ? dateIso.slice(0, 4) : project ? String(getProjectYear(project) || "") : "";
+      return { item, project, type, dateIso, year };
+    })
+    .filter(Boolean);
+}
+
+function renderRouteAchievements() {
+  const wall = document.getElementById("premiacoesWall");
+  if (!wall) return;
+
+  const achievements = getAchievements();
+
+  // Chips de tipo
+  const chipsEl = document.getElementById("premiacoesTypeChips");
+  if (chipsEl) {
+    const types = [
+      { key: "all", label: "Todas" },
+      { key: "premiado", label: "Prêmios" },
+      { key: "nomeado", label: "Nomeações" },
+      { key: "selecionado", label: "Seleções" },
+    ];
+    chipsEl.innerHTML = types
+      .map((t) => `<button type="button" class="chip ${premiacoesFilter.type === t.key ? "active" : ""}" data-award-type="${t.key}">${escapeHtml(t.label)}</button>`)
+      .join("");
+    chipsEl.querySelectorAll("[data-award-type]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        premiacoesFilter.type = btn.dataset.awardType;
+        renderRouteAchievements();
+      });
+    });
+  }
+
+  // Busca
+  const searchEl = document.getElementById("premiacoesSearch");
+  if (searchEl) {
+    if (searchEl.value !== premiacoesFilter.query) searchEl.value = premiacoesFilter.query;
+    if (!searchEl.dataset.bound) {
+      searchEl.dataset.bound = "1";
+      searchEl.addEventListener("input", () => {
+        premiacoesFilter.query = searchEl.value;
+        renderRouteAchievements();
+      });
+    }
+  }
+
+  // Escopo dos gráficos = filtro de tipo
+  const scope = premiacoesFilter.type === "all" ? achievements : achievements.filter((a) => a.type === premiacoesFilter.type);
+
+  // Conquistas por Ano
+  const byYear = {};
+  scope.forEach((a) => {
+    const y = a.year || "Sem data";
+    byYear[y] = (byYear[y] || 0) + 1;
+  });
+  const orderedYear = {};
+  Object.keys(byYear)
+    .sort((a, b) => (a === "Sem data" ? 1 : b === "Sem data" ? -1 : Number(a) - Number(b)))
+    .forEach((k) => (orderedYear[k] = byYear[k]));
+  renderBarChart(document.getElementById("premiacoesByYear"), orderedYear, "vertical", ["#f3ba00"]);
+
+  // Por País
+  const byCountry = {};
+  scope.forEach((a) => {
+    const c = String(a.item.country || "").trim();
+    if (c) byCountry[c] = (byCountry[c] || 0) + 1;
+  });
+  renderHorizontalBarChart(document.getElementById("premiacoesByCountry"), byCountry, ["#f3ba00", "#8b5cf6", "#3b82f6"]);
+
+  // Mural de Conquistas — aplica tipo + busca
+  const query = normalizeSearchText(premiacoesFilter.query);
+  const typeOrder = { premiado: 0, nomeado: 1, selecionado: 2 };
+  const filtered = achievements
+    .filter((a) => premiacoesFilter.type === "all" || a.type === premiacoesFilter.type)
+    .filter((a) => {
+      if (!query) return true;
+      const hay = normalizeSearchText(`${a.item.name || ""} ${a.project?.title || ""} ${a.item.country || ""}`);
+      return hay.includes(query);
+    })
+    .sort((a, b) => {
+      if (a.dateIso && b.dateIso && a.dateIso !== b.dateIso) return b.dateIso.localeCompare(a.dateIso);
+      if (a.dateIso && !b.dateIso) return -1;
+      if (!a.dateIso && b.dateIso) return 1;
+      return typeOrder[a.type] - typeOrder[b.type];
+    });
+
+  const countEl = document.getElementById("premiacoesCount");
+  if (countEl) countEl.textContent = `${filtered.length} conquista${filtered.length === 1 ? "" : "s"}`;
+
+  {
+    if (!filtered.length) {
+      wall.innerHTML = '<div class="empty">Nenhuma conquista encontrada.</div>';
+    } else {
+      wall.innerHTML = filtered
+        .map((a) => {
+          const meta = AWARD_TYPE_META[a.type];
+          const film = a.project ? a.project.title || getRouteProjectLabel(a.project) : "Projeto";
+          const country = String(a.item.country || "").trim();
+          const flag = countryFlagEmoji(country);
+          const dateLabel = a.dateIso ? formatDatePtBr(a.dateIso) : a.year || "";
+          return `
+            <div class="award-card ${meta.className}">
+              <div class="award-icon">${meta.icon}</div>
+              <div class="award-body">
+                <span class="award-festival">${escapeHtml(a.item.name || "Festival / Prêmio")}</span>
+                <span class="award-film">${escapeHtml(film)}</span>
+                <div class="award-foot">
+                  <span class="award-type-label">${escapeHtml(meta.single)}</span>
+                  ${country ? `<span class="award-country">${flag ? flag + " " : ""}${escapeHtml(country)}</span>` : ""}
+                  ${dateLabel ? `<span class="award-date">${escapeHtml(dateLabel)}</span>` : ""}
+                </div>
+              </div>
+            </div>`;
+        })
+        .join("");
+    }
+  }
+}
+
+// ── Comparativos (cruzamentos de dados) ─────────────────────────────
+let comparadorState = { dimension: "category", metric: "count" };
+
+const COMPARADOR_DIMENSIONS = [
+  { key: "category", label: "Categoria", pick: (p) => getProjectField(p, "category") },
+  { key: "nature",   label: "Natureza",  pick: (p) => getProjectField(p, "nature") },
+  { key: "format",   label: "Formato",   pick: (p) => getProjectField(p, "format") },
+  { key: "duration", label: "Duração",   pick: (p) => getProjectField(p, "duration") },
+  { key: "status",   label: "Status",    pick: (p) => getProjectField(p, "status") },
+  { key: "year",     label: "Ano",       pick: (p) => { const y = getProjectYear(p); return y ? String(y) : ""; } },
+];
+
+const COMPARADOR_METRICS = [
+  { key: "count",        label: "Nº de produções",      fmt: (v) => String(v),
+    value: (group) => group.length },
+  { key: "spentTotal",   label: "Investimento total",   fmt: money,
+    value: (group) => group.reduce((s, p) => s + (getProjectSpentValue(p) || 0), 0) },
+  { key: "spentAvg",     label: "Investimento médio",   fmt: money,
+    value: (group) => group.length ? group.reduce((s, p) => s + (getProjectSpentValue(p) || 0), 0) / group.length : 0 },
+  { key: "revenueTotal", label: "Receita total",        fmt: money,
+    value: (group) => group.reduce((s, p) => s + (hasNumericValue(p.revenue) ? Number(p.revenue) : 0), 0) },
+  { key: "result",       label: "Resultado (rec.−inv.)", fmt: money,
+    value: (group) => group.reduce((s, p) => s + ((hasNumericValue(p.revenue) ? Number(p.revenue) : 0) - (getProjectSpentValue(p) || 0)), 0) },
+  { key: "awards",       label: "Nº de premiações",     fmt: (v) => String(v),
+    value: (group, awardsByProject) => group.reduce((s, p) => s + (awardsByProject.get(p.id) || 0), 0) },
+];
+
+function renderComparativos() {
+  const section = document.getElementById("comparativosDashboardSection");
+  if (!section) return;
+
+  const projects = state.projects || [];
+  const achievements = getAchievements();
+  const awardsByProject = new Map();
+  achievements.forEach((a) => {
+    if (a.project) awardsByProject.set(a.project.id, (awardsByProject.get(a.project.id) || 0) + 1);
+  });
+
+  renderComparador(projects, awardsByProject);
+  renderCrossNatureSelection(projects);
+  renderCrossCategoryAwards(projects, awardsByProject);
+  renderCrossDurationCost(projects);
+  renderCrossYearStageTime(projects);
+}
+
+function renderComparador(projects, awardsByProject) {
+  const dimSel = document.getElementById("comparadorDimension");
+  const metSel = document.getElementById("comparadorMetric");
+  const chart = document.getElementById("comparadorChart");
+  if (!dimSel || !metSel || !chart) return;
+
+  if (!dimSel.dataset.filled) {
+    dimSel.dataset.filled = "1";
+    dimSel.innerHTML = COMPARADOR_DIMENSIONS.map((d) => `<option value="${d.key}">${escapeHtml(d.label)}</option>`).join("");
+    dimSel.value = comparadorState.dimension;
+    dimSel.addEventListener("change", () => { comparadorState.dimension = dimSel.value; renderComparador(projects, awardsByProject); });
+  }
+  if (!metSel.dataset.filled) {
+    metSel.dataset.filled = "1";
+    metSel.innerHTML = COMPARADOR_METRICS.map((m) => `<option value="${m.key}">${escapeHtml(m.label)}</option>`).join("");
+    metSel.value = comparadorState.metric;
+    metSel.addEventListener("change", () => { comparadorState.metric = metSel.value; renderComparador(projects, awardsByProject); });
+  }
+
+  const dim = COMPARADOR_DIMENSIONS.find((d) => d.key === comparadorState.dimension) || COMPARADOR_DIMENSIONS[0];
+  const met = COMPARADOR_METRICS.find((m) => m.key === comparadorState.metric) || COMPARADOR_METRICS[0];
+
+  const groups = {};
+  projects.forEach((p) => {
+    const key = String(dim.pick(p) || "").trim();
+    if (!key) return;
+    (groups[key] = groups[key] || []).push(p);
+  });
+
+  const map = {};
+  Object.entries(groups).forEach(([key, group]) => {
+    map[key] = Math.round(met.value(group, awardsByProject) * 100) / 100;
+  });
+  renderHorizontalBarChart(chart, map, [], met.fmt);
+}
+
+// Natureza × Taxa de Seleção (% das inscrições que viraram seleção/nomeação/prêmio)
+function renderCrossNatureSelection(projects) {
+  const el = document.getElementById("crossNatureSelection");
+  if (!el) return;
+  const projById = new Map(projects.map((p) => [p.id, p]));
+  const byNature = {};
+  (state.routes || []).forEach((r) => {
+    const p = projById.get(r.projectId);
+    if (!p) return;
+    const nature = String(getProjectField(p, "nature") || "").trim();
+    if (!nature) return;
+    const entry = byNature[nature] || (byNature[nature] = { total: 0, selected: 0 });
+    entry.total++;
+    if (classifyAwardStatus(r.status)) entry.selected++;
+  });
+  const map = {};
+  Object.entries(byNature).forEach(([nature, { total, selected }]) => {
+    if (total > 0) map[nature] = Math.round((selected / total) * 100);
+  });
+  renderHorizontalBarChart(el, map, [], (v) => `${v}%`);
+}
+
+// Categoria × Premiações (total de conquistas por categoria)
+function renderCrossCategoryAwards(projects, awardsByProject) {
+  const el = document.getElementById("crossCategoryAwards");
+  if (!el) return;
+  const map = {};
+  projects.forEach((p) => {
+    const cat = String(getProjectField(p, "category") || "").trim();
+    if (!cat) return;
+    const n = awardsByProject.get(p.id) || 0;
+    if (n > 0) map[cat] = (map[cat] || 0) + n;
+  });
+  renderHorizontalBarChart(el, map, getConfigColors("categories"));
+}
+
+// Custo Médio por Duração
+function renderCrossDurationCost(projects) {
+  const el = document.getElementById("crossDurationCost");
+  if (!el) return;
+  const groups = {};
+  projects.forEach((p) => {
+    const dur = String(getProjectField(p, "duration") || "").trim();
+    if (!dur) return;
+    const spent = getProjectSpentValue(p);
+    if (!hasNumericValue(spent)) return;
+    (groups[dur] = groups[dur] || []).push(Number(spent));
+  });
+  const map = {};
+  Object.entries(groups).forEach(([dur, arr]) => {
+    map[dur] = Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
+  });
+  renderHorizontalBarChart(el, map, getConfigColors("durations"), money);
+}
+
+// Tempo Médio de Produção por Ano (meses entre primeira e última etapa)
+function renderCrossYearStageTime(projects) {
+  const el = document.getElementById("crossYearStageTime");
+  if (!el) return;
+  const byYear = {};
+  projects.forEach((p) => {
+    const stages = Array.isArray(p.stages) ? p.stages : [];
+    const idxs = [];
+    stages.forEach((s) => {
+      const a = monthToIndex(s.start);
+      const b = monthToIndex(s.end);
+      if (Number.isFinite(a)) idxs.push(a);
+      if (Number.isFinite(b)) idxs.push(b);
+    });
+    if (!idxs.length) return;
+    const span = Math.max(...idxs) - Math.min(...idxs) + 1;
+    const y = getProjectYear(p);
+    const key = y ? String(y) : "Sem ano";
+    (byYear[key] = byYear[key] || []).push(span);
+  });
+  const map = {};
+  Object.keys(byYear)
+    .sort((a, b) => (a === "Sem ano" ? 1 : b === "Sem ano" ? -1 : Number(a) - Number(b)))
+    .forEach((k) => {
+      const arr = byYear[k];
+      map[k] = Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10;
+    });
+  renderBarChart(el, map, "vertical", ["#3b82f6"], (v) => `${v}m`);
+}
+
+// Calcula os próximos prazos de submissão a partir de uma lista de rotas.
+function getUpcomingDeadlines(routeItems, limit = 5) {
+  const now = new Date();
+  const todayIso = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+  const todayMs = Date.parse(`${todayIso}T00:00:00Z`);
+  const projectsById = new Map((state.projects || []).map((p) => [p.id, p]));
+
+  return (routeItems || [])
+    .map((item) => {
+      const iso = normalizeDateInput(item.submissionDeadline);
+      if (!iso) return null;
+      const ms = Date.parse(`${iso}T00:00:00Z`);
+      if (Number.isNaN(ms) || ms < todayMs) return null; // ignora prazos passados
+      const days = Math.round((ms - todayMs) / 86400000);
+      const project = projectsById.get(item.projectId);
+      return { item, iso, days, project };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.iso.localeCompare(b.iso))
+    .slice(0, limit);
+}
+
+// Monta o HTML dos cards de deadline (compartilhado entre Rota e Dashboard).
+function buildDeadlineCardsHtml(upcoming) {
+  return upcoming
+    .map(({ item, iso, days, project }) => {
+      const filmTitle = project ? String(project.title || getRouteProjectLabel(project)) : "Projeto";
+      const code = project ? String(project.code || "").trim() : "";
+      const urgency = days <= 7 ? "urgent" : days <= 30 ? "soon" : "calm";
+      const daysLabel = days === 0 ? "Hoje" : days === 1 ? "Amanhã" : `${days} dias`;
+      return `
+        <div class="deadline-card urgency-${urgency}" title="${escapeHtml(filmTitle)} — ${escapeHtml(item.name || "")}">
+          <div class="deadline-card-top">
+            <span class="deadline-card-date">${escapeHtml(formatDatePtBr(iso))}</span>
+            <span class="deadline-card-countdown">${escapeHtml(daysLabel)}</span>
+          </div>
+          <span class="deadline-card-festival">${escapeHtml(item.name || "Festival / Prêmio")}</span>
+          <span class="deadline-card-film">${code ? `<span class="deadline-card-code">#${escapeHtml(code)}</span> ` : ""}${escapeHtml(filmTitle)}</span>
+        </div>`;
+    })
+    .join("");
+}
+
+function renderRouteDeadlines(routeItems) {
+  const panel = document.getElementById("routeDeadlinesPanel");
+  const container = document.getElementById("routeDeadlines");
+  const hint = document.getElementById("routeDeadlinesHint");
+  if (!panel || !container) return;
+
+  const upcoming = getUpcomingDeadlines(routeItems, 5);
+  if (!upcoming.length) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  if (hint) hint.textContent = `${upcoming.length} prazo${upcoming.length > 1 ? "s" : ""} à frente`;
+  container.innerHTML = buildDeadlineCardsHtml(upcoming);
+}
+
 function renderRoute() {
   const body = document.getElementById("routeTableBody");
   const summary = document.getElementById("routeSummary");
@@ -3875,6 +4325,8 @@ function renderRoute() {
   renderDashboardFilterChips(document.getElementById("routeStatusChips"), routeStatuses, selectedRouteFilters.statuses, "route-statuses", renderRoute);
   renderValuePickerFilter(document.getElementById("routeCountryFilter"), routeCountries, selectedRouteFilters.countries, "routeCountries", renderRoute, "Buscar país...");
   renderDashboardFilterChips(document.getElementById("routeExclusivityChips"), routeExclusivities, selectedRouteFilters.exclusivities, "route-exclusivities", renderRoute);
+
+  renderRouteDeadlines(allRouteItems);
 
   const allExpanded = projects.length > 0 && projects.every((p) => expandedRouteProjects.has(p.id));
   summary.innerHTML = `
@@ -4441,9 +4893,12 @@ function openProjectDialog(projectId = null) {
   const teamValue = hasNumericValue(project?.spentTeam) ? Number(project.spentTeam) : 0;
   document.getElementById("projectSpentProduction").value = formatCurrencyInputBRL(productionValue);
   document.getElementById("projectSpentTeam").value = formatCurrencyInputBRL(teamValue || null);
+  const revenueValue = hasNumericValue(project?.revenue) ? Number(project.revenue) : null;
+  document.getElementById("projectRevenue").value = formatCurrencyInputBRL(revenueValue);
   updateProjectSpentTotal();
   document.getElementById("projectSpentProduction").oninput = updateProjectSpentTotal;
   document.getElementById("projectSpentTeam").oninput = updateProjectSpentTotal;
+  document.getElementById("projectRevenue").oninput = () => updateProjectResultDisplay();
 
   // Evento: mudança na Natureza atualiza SKU automaticamente para novos projetos
   const natureSelect = document.getElementById("projectNature");
@@ -4477,6 +4932,8 @@ function collectProjectForm() {
   const existingProject = state.projects.find((project) => project.id === projectId);
   const rawProduction = document.getElementById("projectSpentProduction").value.trim();
   const rawTeam = document.getElementById("projectSpentTeam").value.trim();
+  const rawRevenue = document.getElementById("projectRevenue").value.trim();
+  const parsedRevenue = rawRevenue ? parseCurrencyInputBRL(rawRevenue) : 0;
   const rawYear = document.getElementById("projectYear").value.trim();
   const rawReleaseDate = (document.getElementById("projectReleaseDateText").value || document.getElementById("projectReleaseDatePicker").value || "").trim();
   const normalizedReleaseDate = normalizeDateInput(rawReleaseDate);
@@ -4495,6 +4952,10 @@ function collectProjectForm() {
   }
   if (rawTeam && parsedTeam === null) {
     alert("Cachê de Equipe inválido. Use um valor numérico.");
+    return null;
+  }
+  if (rawRevenue && parsedRevenue === null) {
+    alert("Receita inválida. Use um valor numérico.");
     return null;
   }
   if (rawYear && (!Number.isInteger(parsedYear) || parsedYear < 1900 || parsedYear > 2100)) {
@@ -4539,6 +5000,7 @@ function collectProjectForm() {
     spentProduction: parsedProduction || 0,
     spentTeam: parsedTeam || 0,
     budget: parsedBudget,
+    revenue: parsedRevenue || 0,
     releaseDate: normalizedReleaseDate,
     // Sincroniza com o campo legado para evitar reexibição do valor após limpar.
     spent: parsedBudget,
@@ -5523,7 +5985,7 @@ function renderTileChart(container, map, palette = []) {
   container.innerHTML = entries.map(([label, value], idx) => {
     const cls = tileStyles[idx % tileStyles.length];
     const delay = `${idx * 0.06}s`;
-    return `<div class="tile-card ${cls}" style="animation-delay:${delay}">
+    return `<div class="tile-card ${cls}" data-seg-value="${escapeHtml(label)}" style="animation-delay:${delay}">
       <div class="tile-num">${value}</div>
       <div class="tile-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
     </div>`;
@@ -5558,7 +6020,7 @@ function renderColoredBarChart(container, map, customPalette) {
     const color = palette[idx % palette.length];
     const height = Math.max(Math.round((Number(value) / max) * 110), 10);
     const delay = `${idx * 0.06}s`;
-    return `<div class="cbar-col">
+    return `<div class="cbar-col" data-seg-value="${escapeHtml(label)}">
       <div class="cbar-bar-wrap">
         <span class="cbar-value-above" style="bottom:${height + 5}px">${value}</span>
         <div class="cbar-bar" style="height:${height}px;background:${color};animation-delay:${delay}"></div>
@@ -5606,7 +6068,7 @@ function renderAvgStageDonut(container, map) {
   const legend = entries.map(([name, val], idx) => {
     const color = stageColors[name] || defaultColors[idx % defaultColors.length];
     const delay = `${idx * 0.06 + 0.1}s`;
-    return `<div class="avg-donut-legend-item" style="animation-delay:${delay}">
+    return `<div class="avg-donut-legend-item" data-stage-name="${escapeHtml(name)}" style="animation-delay:${delay}">
       <div class="avg-donut-dot" style="background:${color}"></div>
       <div class="avg-donut-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
       <div class="avg-donut-val">${val} <span>m</span></div>
@@ -5789,11 +6251,14 @@ function getCountryCoords(countryName) {
 const COUNTRY_ISO2 = {
   "Brasil":"BR","Argentina":"AR","Chile":"CL","Colômbia":"CO","Peru":"PE","Uruguai":"UY",
   "Venezuela":"VE","Equador":"EC","Bolívia":"BO","Paraguai":"PY","Guiana":"GY","Suriname":"SR",
-  "Estados Unidos":"US","Canadá":"CA","México":"MX","Cuba":"CU","Costa Rica":"CR",
+  "Estados Unidos":"US","EUA":"US","USA":"US","Canada":"CA","Canadá":"CA","México":"MX","Cuba":"CU","Costa Rica":"CR",
   "Guatemala":"GT","Honduras":"HN","El Salvador":"SV","Nicarágua":"NI","Panamá":"PA",
   "Portugal":"PT","Espanha":"ES","França":"FR","Alemanha":"DE","Itália":"IT","Reino Unido":"GB",
-  "Países Baixos":"NL","Bélgica":"BE","Suíça":"CH","Áustria":"AT","Polônia":"PL","Suécia":"SE",
+  "Inglaterra":"GB","Escócia":"GB","Irlanda do Norte":"GB","País de Gales":"GB",
+  "Irlanda":"IE","Países Baixos":"NL","Holanda":"NL","Bélgica":"BE","Suíça":"CH","Áustria":"AT","Polônia":"PL","Suécia":"SE",
   "Noruega":"NO","Dinamarca":"DK","Finlândia":"FI","Rússia":"RU","Grécia":"GR",
+  "Emirados Árabes Unidos":"AE","Emirados Árabes":"AE","UAE":"AE",
+  "Escócia":"GB","Austrália":"AU",
   "República Tcheca":"CZ","Hungria":"HU","Romênia":"RO","Croácia":"HR","Sérvia":"RS",
   "Bulgária":"BG","Eslováquia":"SK","Eslovênia":"SI","Ucrânia":"UA","Bielorrússia":"BY",
   "Japão":"JP","China":"CN","Coreia do Sul":"KR","Índia":"IN","Irã":"IR","Israel":"IL",
@@ -5826,6 +6291,93 @@ function buildCountryPopupHtml(country, items) {
     </div>`;
   });
   return html;
+}
+
+// Converte os marcadores do jsvectormap em pins SVG.
+// Mantém os <circle> originais invisíveis como âncoras; usa MutationObserver
+// para sincronizar a posição do pin sempre que o jsvectormap mover o círculo
+// (zoom, pan, redimensionamento).
+function convertMarkersToPins(svgEl, onClickFn) {
+  if (!svgEl) return;
+
+  // Desconecta observer anterior e limpa pins residuais de chamadas anteriores
+  if (svgEl._pinObserver) { svgEl._pinObserver.disconnect(); svgEl._pinObserver = null; }
+  svgEl.querySelectorAll(".jvm-pin").forEach((el) => el.remove());
+  // Restaura visibilidade dos círculos-âncora antes de reprocessar
+  svgEl.querySelectorAll(".jvm-marker").forEach((el) => {
+    el.setAttribute("opacity", "1");
+    el.style.pointerEvents = "";
+  });
+
+  const ns = "http://www.w3.org/2000/svg";
+  const rb = 8, h = 18; // raio do corpo e altura total do pin
+
+  function pinPath(cx, cy) {
+    const bcy = cy - h + rb;
+    const tx  = rb * 0.57;
+    return `M ${cx} ${cy} L ${cx - tx} ${bcy + rb * 0.5} A ${rb} ${rb} 0 1 1 ${cx + tx} ${bcy + rb * 0.5} Z`;
+  }
+
+  const managed = new Map(); // circle → g
+
+  function syncPin(circle) {
+    const cx = parseFloat(circle.getAttribute("cx") || 0);
+    const cy = parseFloat(circle.getAttribute("cy") || 0);
+    if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+
+    let g = managed.get(circle);
+    if (!g) {
+      const idx = circle.getAttribute("data-index");
+      g = document.createElementNS(ns, "g");
+      g.setAttribute("class", "jvm-pin");
+      g.style.cursor = "pointer";
+
+      const body = document.createElementNS(ns, "path");
+      body.setAttribute("fill", "#f3ba00");
+      body.setAttribute("stroke", "#111");
+      body.setAttribute("stroke-width", "1.2");
+      body.setAttribute("stroke-linejoin", "round");
+
+      const dot = document.createElementNS(ns, "circle");
+      dot.setAttribute("fill", "rgba(0,0,0,0.25)");
+      dot.setAttribute("pointer-events", "none");
+
+      g.appendChild(body);
+      g.appendChild(dot);
+
+      if (onClickFn && idx !== null) {
+        g.addEventListener("click", (e) => onClickFn(e, parseInt(idx, 10)));
+      }
+
+      circle.parentNode.appendChild(g);
+      // Esconde círculo original mas mantém no DOM como âncora
+      circle.setAttribute("opacity", "0");
+      circle.style.pointerEvents = "none";
+      managed.set(circle, g);
+    }
+
+    // Atualiza geometria do pin conforme posição atual do círculo-âncora
+    const bcy = cy - h + rb;
+    g.querySelector("path").setAttribute("d", pinPath(cx, cy));
+    const dot = g.querySelector("circle");
+    dot.setAttribute("cx", cx); dot.setAttribute("cy", bcy); dot.setAttribute("r", rb * 0.32);
+  }
+
+  // Conversão inicial
+  svgEl.querySelectorAll(".jvm-marker").forEach(syncPin);
+
+  // Observa mudanças de posição nos círculos-âncora (disparadas pelo jsvectormap em zoom/pan)
+  const markersEl = svgEl.querySelector(".jvm-markers") || svgEl;
+  const observer = new MutationObserver((mutations) => {
+    const toSync = new Set();
+    mutations.forEach((m) => {
+      if (m.type === "attributes" && m.target.classList?.contains("jvm-marker")) toSync.add(m.target);
+      if (m.type === "childList") m.addedNodes.forEach((n) => { if (n.classList?.contains("jvm-marker")) toSync.add(n); });
+    });
+    toSync.forEach(syncPin);
+  });
+  observer.observe(markersEl, { attributes: true, attributeFilter: ["cx", "cy"], childList: true, subtree: true });
+  svgEl._pinObserver = observer;
 }
 
 function renderWorldMap(container, premiadosItems) {
@@ -5879,7 +6431,8 @@ function renderWorldMap(container, premiadosItems) {
     map: "world",
     selector: container,
     backgroundColor: "transparent",
-    zoomButtons: false,
+    zoomButtons: true,
+    zoomOnScroll: true,
     regionStyle: {
       initial:  { fill: mapRegionFill, stroke: mapRegionStroke, strokeWidth: 0.4 },
       hover:    { fill: mapRegionHover, cursor: "default" },
@@ -5935,15 +6488,29 @@ function renderWorldMap(container, premiadosItems) {
     return;
   }
 
-  // Força o SVG a preencher todo o container (jsvectormap define dimensões inline)
-  const mapSvg = container.querySelector("svg");
-  if (mapSvg) {
-    mapSvg.setAttribute("width", "100%");
-    mapSvg.setAttribute("height", "100%");
-    mapSvg.style.setProperty("width",  "100%", "important");
-    mapSvg.style.setProperty("height", "100%", "important");
+  // Redimensiona o SVG para o tamanho real do container após o flex layout resolver
+  const _resizeMapSvg = () => {
+    const mapSvg = container.querySelector("svg");
+    if (!mapSvg) return;
+    const h = container.clientHeight || container.offsetHeight;
+    const w = container.clientWidth  || container.offsetWidth;
     mapSvg.style.setProperty("display", "block", "important");
-  }
+    mapSvg.style.setProperty("width",  "100%", "important");
+    if (h > 0) {
+      mapSvg.setAttribute("height", h);
+      mapSvg.style.setProperty("height", h + "px", "important");
+    } else {
+      mapSvg.setAttribute("height", "100%");
+      mapSvg.style.setProperty("height", "100%", "important");
+    }
+    if (w > 0) mapSvg.setAttribute("width", w);
+  };
+  // Aguarda o flex layout resolver e o SVG estar pronto antes de converter pins
+  const _onClickHandler = mapOpts.onMarkerClick.bind(null);
+  setTimeout(() => {
+    _resizeMapSvg();
+    convertMarkersToPins(container.querySelector("svg"), _onClickHandler);
+  }, 150);
 
   // Fechar popup ao clicar no mapa
   container.addEventListener("click", (e) => {
@@ -5979,7 +6546,7 @@ function isValidCountry(value) {
 }
 
 // Horizontal bar chart com labels e valores compactos (para status/categoria/etc.)
-function renderHorizontalBarChart(container, map, palette = []) {
+function renderHorizontalBarChart(container, map, palette = [], valueFormatter = null) {
   if (!container) return;
   const entries = Object.entries(map).sort((a, b) => Number(b[1]) - Number(a[1]));
   if (!entries.length) {
@@ -5993,10 +6560,11 @@ function renderHorizontalBarChart(container, map, palette = []) {
       const color = (palette && palette[idx]) || defaultColors[idx % defaultColors.length];
       const pct = Math.max((Number(value) / max) * 100, 4);
       const delay = `${idx * 0.05}s`;
-      return `<div class="hbar-row">
+      const display = valueFormatter ? valueFormatter(Number(value)) : value;
+      return `<div class="hbar-row" data-seg-value="${escapeHtml(label)}">
         <div class="hbar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
         <div class="hbar-track"><div class="hbar-fill" style="width:${pct}%;background:${color};animation-delay:${delay}"></div></div>
-        <div class="hbar-value">${value}</div>
+        <div class="hbar-value">${escapeHtml(String(display))}</div>
       </div>`;
     })
     .join("");
@@ -6112,7 +6680,23 @@ function updateProjectSpentTotal() {
   const production = parseCurrencyInputBRL(document.getElementById("projectSpentProduction")?.value || "") || 0;
   const team = parseCurrencyInputBRL(document.getElementById("projectSpentTeam")?.value || "") || 0;
   const totalEl = document.getElementById("projectSpentTotal");
-  if (totalEl) totalEl.textContent = money(production + team);
+  const total = production + team;
+  if (totalEl) totalEl.textContent = money(total);
+  updateProjectResultDisplay(total);
+}
+
+function updateProjectResultDisplay(totalSpent) {
+  const resultEl = document.getElementById("projectResultDisplay");
+  if (!resultEl) return;
+  const spent = typeof totalSpent === "number"
+    ? totalSpent
+    : (parseCurrencyInputBRL(document.getElementById("projectSpentProduction")?.value || "") || 0)
+      + (parseCurrencyInputBRL(document.getElementById("projectSpentTeam")?.value || "") || 0);
+  const revenue = parseCurrencyInputBRL(document.getElementById("projectRevenue")?.value || "") || 0;
+  const result = revenue - spent;
+  resultEl.textContent = money(result);
+  resultEl.classList.toggle("result-positive", result > 0);
+  resultEl.classList.toggle("result-negative", result < 0);
 }
 
 function inlineSelect(field, projectId, currentValue, options, badgeClass = "") {
@@ -6153,6 +6737,285 @@ function countBy(projects, picker, ignoreEmpty = false) {
     acc[finalKey] = (acc[finalKey] || 0) + 1;
     return acc;
   }, {});
+}
+
+// Conta por valor multi-valorado (um projeto pode contar em vários grupos).
+// picker deve retornar um array de strings.
+function countByMulti(projects, picker) {
+  return projects.reduce((acc, p) => {
+    const values = picker(p) || [];
+    values.forEach((raw) => {
+      const key = String(raw ?? "").trim();
+      if (!key) return;
+      acc[key] = (acc[key] || 0) + 1;
+    });
+    return acc;
+  }, {});
+}
+
+// Campos-chave avaliados no painel de Completude dos Dados.
+const COMPLETENESS_CHECKS = [
+  { label: "Ano",          test: (p) => getProjectYear(p) > 0 },
+  { label: "Categoria",    test: (p) => Boolean(String(p.category || "").trim()) },
+  { label: "Formato",      test: (p) => Boolean(String(p.format || "").trim()) },
+  { label: "Natureza",     test: (p) => Boolean(String(p.nature || "").trim()) },
+  { label: "Duração",      test: (p) => Boolean(String(p.duration || "").trim()) },
+  { label: "Status",       test: (p) => Boolean(String(p.status || "").trim()) },
+  { label: "Lançamento",   test: (p) => Boolean(normalizeDateInput(p.releaseDate)) },
+  { label: "Distribuição", test: (p) => getProjectDistributions(p).length > 0 },
+  { label: "Investimento", test: (p) => hasNumericValue(p.spent) || hasNumericValue(p.budget) || hasNumericValue(p.spentProduction) },
+];
+
+function renderDataCompleteness(projects) {
+  const container = document.getElementById("dataCompleteness");
+  const scoreEl = document.getElementById("dataCompletenessScore");
+  if (!container) return;
+
+  const total = projects.length;
+  if (!total) {
+    container.innerHTML = '<div class="empty">Sem produções para avaliar.</div>';
+    if (scoreEl) scoreEl.textContent = "";
+    return;
+  }
+
+  const rows = COMPLETENESS_CHECKS.map((check) => {
+    const filled = projects.reduce((n, p) => n + (check.test(p) ? 1 : 0), 0);
+    const missing = total - filled;
+    const pct = Math.round((filled / total) * 100);
+    return { label: check.label, check, filled, missing, pct };
+  });
+
+  const totalCells = COMPLETENESS_CHECKS.length * total;
+  const filledCells = rows.reduce((n, r) => n + r.filled, 0);
+  const overall = totalCells ? Math.round((filledCells / totalCells) * 100) : 0;
+  if (scoreEl) scoreEl.textContent = `${overall}% completo`;
+
+  // Ordena por maior número de pendências primeiro
+  rows.sort((a, b) => b.missing - a.missing || a.label.localeCompare(b.label, "pt-BR"));
+
+  container.innerHTML = rows
+    .map((r) => {
+      const tone = r.pct >= 90 ? "good" : r.pct >= 60 ? "mid" : "low";
+      const meta = r.missing ? `${r.missing} faltando` : "completo";
+      const clickable = r.missing > 0 ? ' role="button" tabindex="0"' : "";
+      return `
+        <div class="completeness-row tone-${tone}" data-completeness-label="${escapeHtml(r.label)}"${clickable}>
+          <span class="completeness-label">${escapeHtml(r.label)}</span>
+          <div class="completeness-track"><div class="completeness-fill" style="width:${r.pct}%"></div></div>
+          <span class="completeness-meta">${escapeHtml(meta)}</span>
+        </div>`;
+    })
+    .join("");
+
+  // Drill-down: clicar numa linha lista as produções que faltam aquele campo
+  container.querySelectorAll(".completeness-row[role='button']").forEach((row) => {
+    row.addEventListener("click", () => {
+      const label = row.getAttribute("data-completeness-label");
+      const check = COMPLETENESS_CHECKS.find((c) => c.label === label);
+      if (!check) return;
+      const missingProjects = projects.filter((p) => !check.test(p));
+      openProjectListModal(`Sem "${label}" — ${missingProjects.length} produç${missingProjects.length === 1 ? "ão" : "ões"}`, missingProjects);
+    });
+  });
+}
+
+// ── Cross-filtering + Drill-down ─────────────────────────────────────
+// Liga os segmentos de um gráfico ao filtro do dashboard (toggle).
+function wireCrossFilter(container, filterKey) {
+  if (!container) return;
+  const set = selectedDashboardFilters[filterKey];
+  if (!set) return;
+  container.querySelectorAll("[data-seg-value]").forEach((seg) => {
+    const value = seg.getAttribute("data-seg-value");
+    seg.classList.add("seg-clickable");
+    if (set.has(value)) seg.classList.add("seg-active");
+    seg.addEventListener("click", () => {
+      if (set.has(value)) set.delete(value);
+      else set.add(value);
+      renderDashboard();
+    });
+  });
+}
+
+// Cross-filter por ano (usa selectedDashboardYears; "SEM ANO" não é filtrável via chip)
+function wireYearCrossFilter(container) {
+  if (!container) return;
+  container.querySelectorAll("[data-seg-value]").forEach((seg) => {
+    const raw = seg.getAttribute("data-seg-value");
+    if (raw === "SEM ANO") return; // sem suporte de filtro para "sem ano"
+    seg.classList.add("seg-clickable");
+    if (selectedDashboardYears.has(raw)) seg.classList.add("seg-active");
+    seg.addEventListener("click", () => {
+      if (selectedDashboardYears.has(raw)) selectedDashboardYears.delete(raw);
+      else selectedDashboardYears.add(raw);
+      renderDashboard();
+    });
+  });
+}
+
+// Drill-down do donut "Tempo Médio por Etapa": clicar numa etapa lista
+// as produções com o tempo que cada uma levou naquela etapa.
+function wireStageDonutDrilldown(container, projects) {
+  if (!container) return;
+  container.querySelectorAll("[data-stage-name]").forEach((item) => {
+    item.classList.add("seg-clickable");
+    item.addEventListener("click", () => {
+      const stageName = item.getAttribute("data-stage-name");
+      const stage = (state.settings.stages || []).find((s) => s.name === stageName);
+      if (!stage) return;
+      const rows = projects
+        .map((p) => {
+          const st = (p.stages || []).find((s) => s.stageId === stage.id);
+          if (!st || !isValidStagePeriod(st.start) || !isValidStagePeriod(st.end)) return null;
+          const months = stageDurationFromRange(st.start, st.end);
+          if (!Number.isFinite(months) || months <= 0) return null;
+          return { project: p, months };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.months - a.months);
+      const monthsById = new Map(rows.map((r) => [r.project.id, r.months]));
+      openProjectListModal(
+        `${stageName} — tempo por produção`,
+        rows.map((r) => r.project),
+        (p) => `${monthsById.get(p.id)} ${monthsById.get(p.id) === 1 ? "mês" : "meses"}`,
+        true
+      );
+    });
+  });
+}
+
+// Barra de filtros ativos (mostra/remove os cruzamentos aplicados)
+const CROSS_FILTER_LABELS = {
+  statuses: "Status",
+  categories: "Categoria",
+  formats: "Formato",
+  natures: "Natureza",
+  durations: "Duração",
+  distributions: "Distribuição",
+};
+
+function renderActiveCrossFilters() {
+  const bar = document.getElementById("activeCrossFilters");
+  if (!bar) return;
+  const chips = [];
+  // Ano (estado separado)
+  selectedDashboardYears.forEach((value) => {
+    chips.push({ key: "__year", value, label: value === "__no_year" ? "Sem ano" : value });
+  });
+  Object.keys(CROSS_FILTER_LABELS).forEach((key) => {
+    const set = selectedDashboardFilters[key];
+    if (!set) return;
+    set.forEach((value) => {
+      chips.push({ key, value, label: value });
+    });
+  });
+
+  if (!chips.length) {
+    bar.hidden = true;
+    bar.innerHTML = "";
+    return;
+  }
+  bar.hidden = false;
+  const dimLabel = (key) => (key === "__year" ? "Ano" : CROSS_FILTER_LABELS[key] || "");
+  bar.innerHTML = `
+    <span class="active-filters-label">Filtros ativos:</span>
+    ${chips
+      .map(
+        (c) => `<button type="button" class="active-filter-chip" data-key="${c.key}" data-value="${escapeHtml(c.value)}">
+          <span class="active-filter-dim">${escapeHtml(dimLabel(c.key))}:</span> ${escapeHtml(c.label)}
+          <span class="active-filter-x">×</span>
+        </button>`
+      )
+      .join("")}
+    <button type="button" class="active-filters-clear" id="clearCrossFilters">Limpar tudo</button>`;
+
+  bar.querySelectorAll(".active-filter-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      if (chip.dataset.key === "__year") {
+        selectedDashboardYears.delete(chip.dataset.value);
+      } else {
+        const set = selectedDashboardFilters[chip.dataset.key];
+        if (set) set.delete(chip.dataset.value);
+      }
+      renderDashboard();
+    });
+  });
+  bar.querySelector("#clearCrossFilters")?.addEventListener("click", () => {
+    Object.keys(CROSS_FILTER_LABELS).forEach((key) => selectedDashboardFilters[key]?.clear());
+    selectedDashboardYears.clear();
+    renderDashboard();
+  });
+}
+
+// ── Relatório exportável (PDF via impressão nativa) ─────────────────
+function exportReport(scope) {
+  const validScope = scope === "rota" || scope === "producoes" ? scope : "ambos";
+  document.getElementById("exportDialog")?.close();
+
+  // Garante que estamos na aba Dashboard
+  if (currentTab !== "dashboard") openTab("dashboard");
+
+  const prevView = selectedDashboardView;
+  selectedDashboardView = validScope === "rota" ? "rota" : validScope === "producoes" ? "producoes" : "todos";
+  renderDashboard();
+
+  // Preenche o cabeçalho que só aparece na impressão
+  const titleEl = document.getElementById("printReportTitle");
+  const metaEl = document.getElementById("printReportMeta");
+  const scopeLabel = validScope === "producoes" ? "Produções" : validScope === "rota" ? "Rota" : "Produções + Rota";
+  if (titleEl) titleEl.textContent = `Relatório — ${scopeLabel}`;
+  if (metaEl) {
+    const dateStr = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date());
+    metaEl.textContent = `Gerado em ${dateStr}`;
+  }
+
+  document.body.classList.add("printing", `print-${validScope}`);
+
+  const cleanup = () => {
+    document.body.classList.remove("printing", "print-producoes", "print-rota", "print-ambos");
+    selectedDashboardView = prevView;
+    renderDashboard();
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+
+  // Pequeno atraso para o layout (e o mapa SVG) assentarem antes de imprimir
+  setTimeout(() => window.print(), 350);
+}
+
+// Modal genérico de drill-down: lista de produções clicáveis.
+// metaFn(project) → texto da direita (default: ano · status). keepOrder mantém a ordem recebida.
+function openProjectListModal(title, projects, metaFn = null, keepOrder = false) {
+  const dialog = document.getElementById("drilldownDialog");
+  const titleEl = document.getElementById("drilldownTitle");
+  const body = document.getElementById("drilldownBody");
+  if (!dialog || !body) return;
+  if (titleEl) titleEl.textContent = title;
+
+  if (!projects.length) {
+    body.innerHTML = '<div class="empty">Nenhuma produção.</div>';
+  } else {
+    const list = keepOrder ? [...projects] : [...projects].sort((a, b) => String(a.title || "").localeCompare(String(b.title || ""), "pt-BR"));
+    body.innerHTML = `<div class="drilldown-list">${list
+      .map((p) => {
+        const code = p.code ? `#${escapeHtml(p.code)}` : "";
+        const year = getProjectYear(p) || "";
+        const meta = metaFn ? metaFn(p) : `${year ? year + " · " : ""}${getProjectField(p, "status") || "—"}`;
+        return `<button type="button" class="drilldown-item" data-project-id="${p.id}">
+          <span class="drilldown-item-main"><span class="drilldown-item-code">${code}</span> ${escapeHtml(p.title || "Sem título")}</span>
+          <span class="drilldown-item-meta">${escapeHtml(String(meta))}</span>
+        </button>`;
+      })
+      .join("")}</div>`;
+    body.querySelectorAll(".drilldown-item").forEach((item) => {
+      item.addEventListener("click", () => {
+        const id = item.dataset.projectId;
+        dialog.close();
+        if (canEditContent()) openProjectDialog(id);
+      });
+    });
+  }
+  dialog.showModal();
 }
 
 function countByYearWithMissing(projects) {
