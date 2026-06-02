@@ -390,6 +390,7 @@ async function init() {
   bindNavigation();
   bindGlobalActions();
   bindDialog();
+  injectDialogCloseButtons();
   bindAuthActions();
   updateLoginModeUi();
   restoreSessionUser();
@@ -1520,6 +1521,21 @@ function ensureAdminAccount() {
     admin.firstAccessPending = false;
     saveState();
   }
+}
+
+function injectDialogCloseButtons() {
+  const closeSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>`;
+  document.querySelectorAll("dialog").forEach((dlg) => {
+    const heading = dlg.querySelector("h2, h3");
+    if (!heading || heading.querySelector(".dialog-close-btn")) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "dialog-close-btn";
+    btn.setAttribute("aria-label", "Fechar");
+    btn.innerHTML = closeSvg;
+    btn.onclick = () => dlg.close();
+    heading.appendChild(btn);
+  });
 }
 
 function bindDialog() {
@@ -4900,10 +4916,9 @@ function openProjectDialog(projectId = null) {
   document.getElementById("projectSpentTeam").oninput = updateProjectSpentTotal;
   document.getElementById("projectRevenue").oninput = () => updateProjectResultDisplay();
 
-  // Evento: mudança na Natureza atualiza SKU automaticamente para novos projetos
+  // Evento: mudança na Natureza atualiza SKU automaticamente (novos e existentes)
   const natureSelect = document.getElementById("projectNature");
   natureSelect.onchange = () => {
-    if (!isNewProject) return;
     const isSD = normalizeSearchText(natureSelect.value) === normalizeSearchText(FIXED_NATURE_LABEL);
     document.getElementById("projectCode").value = nextCode(isSD ? "03" : "02");
   };

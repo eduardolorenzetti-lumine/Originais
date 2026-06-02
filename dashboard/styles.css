@@ -3374,10 +3374,12 @@ dialog {
   overflow-y: auto;
 }
 
-/* Centraliza qualquer <dialog> modal (um reset global zera a margem padrão
-   do user-agent, o que jogava o modal para o canto superior esquerdo). */
+/* Centraliza qualquer <dialog> modal com position:fixed para garantir
+   centralização vertical e horizontal em todos os browsers. */
 dialog[open] {
   margin: auto;
+  position: fixed;
+  inset: 0;
 }
 
 dialog::backdrop {
@@ -3385,6 +3387,12 @@ dialog::backdrop {
 }
 
 /* Dialog title */
+dialog h2,
+dialog h3 {
+  display: flex;
+  align-items: center;
+}
+
 dialog h2 {
   font-size: 15px;
   font-weight: 700;
@@ -3397,6 +3405,31 @@ dialog h2 {
   position: sticky;
   top: -18px;
   z-index: 1;
+}
+
+.dialog-close-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--mid);
+  padding: 3px;
+  border-radius: var(--r-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.dialog-close-btn:hover {
+  color: var(--black);
+  background: var(--pale);
+}
+
+.dialog-close-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 #projectForm h2 {
