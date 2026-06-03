@@ -23,6 +23,30 @@ Categorias: `BUG_FIX` | `DATA_RECOVERY` | `FEATURE` | `DB_SCHEMA` | `DATA_CORREC
 
 ---
 
+### [2026-06-03] ~18h30 — BUG_FIX + REFACTOR + DB_SCHEMA (Auditoria do sistema de usuários)
+**Contexto:** Não era possível cadastrar/entrar com novos usuários. Aline e Jordana foram ativadas com senha provisória, não entraram (Aline: "não cadastrado"; Jordana: voltava ao login), foram excluídas e recriadas — e continuaram sem acesso.
+
+**Diagnóstico (3 fontes de verdade dessincronizadas):** `auth.users` (login/senha), `app_users` (nome/role/ativo) e `app_state.users` (JSON legado, vazio em prod). Causas-raiz:
+1. **Exclusão incompleta:** `deleteSecureUserFromSupabase` apagava só de `app_users`, nunca de `auth.users`. A recriação em modo convite caía em `422 já registrado` e a Edge Function tratava como "sucesso" silencioso, sem enviar e-mail. (Confirmado nos logs de auth: POST /invite → 422 para ambas às 17:49.)
+2. **Bloqueio falso no login:** o pré-check de "e-mail cadastrado" lia uma lista de `app_users` em cache desatualizado → falso "não cadastrado".
+3. **Autorização frouxa:** `currentSecureUser?.active !== false` dava `true` para usuário ausente de `app_users` (`undefined !== false`) → entrava em estado quebrado.
+4. **RLS furada:** `app_users` tinha políticas `USING(true)` (além das corretas `*_admin`/`_self`), permitindo que qualquer autenticado editasse a tabela e **se promovesse a ADMIN**.
+
+**Correções aplicadas:**
+- **Desbloqueio imediato:** redefinida senha de `aline.santos` (`Aline@2026`) e `jordana.bastos` (`Jordana@2026`) via bcrypt em `auth.users`; login validado (HTTP 200).
+- **Frontend** (`script.js`): senha provisória obrigatória para novo usuário (removido o toggle/▶ convite quebrado); login revalida e-mails autorizados ao vivo a cada tentativa; lógica de autorização exige registro ativo em `app_users` (cache só como fallback de rede); exclusão passa a chamar a Edge Function (exclusão completa).
+- **Edge Function `set-user-password` v5:** adicionado `action: "delete"` (service role) que remove de `auth.users` E `app_users`, com proteção contra auto-exclusão.
+- **RLS:** removidas as 4 políticas `USING(true)` de `app_users`. Restam apenas `*_admin` (escrita só ADMIN) e `*_self` (usuário lê/edita o próprio registro, sem poder mudar role/ativo). Fecha a escalada de privilégio.
+- Edge Function `temp-reset-admin` já estava neutralizada (retorna 410).
+
+**Modelo de onboarding definido:** senha provisória (admin define e compartilha; usuário troca depois em "Esqueci minha senha" / perfil).
+
+**Pendências sinalizadas:** `mariana.lopez@lumine.tv` órfã (em `auth.users`, fora de `app_users`); revisão do cache local (localStorage/IndexedDB) que causa relatos de "dados diferentes".
+
+**Feito por:** Claude (Opus 4.8), com aprovação do usuário
+
+---
+
 ### [2026-05-19] ~14h00 — BUG_FIX
 **O que foi feito:** Identificado e diagnosticado bug de perda de dados no `mergeLocalAndRemoteState`.
 **Motivo / Contexto:** A função havia sido alterada para sempre preferir o estado remoto (Supabase) sobre o local (localStorage). Isso fez com que ~R$430.000 em valores de `spent` gravados localmente fossem descartados ao sincronizar.
