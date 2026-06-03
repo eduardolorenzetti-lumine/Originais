@@ -6,8 +6,12 @@
   <meta http-equiv="Content-Language" content="pt-BR" />
   <title>Originais Lumine</title>
   <link rel="icon" type="image/png" href="assets/images/lumine-favicon.png" />
-  <link rel="stylesheet" href="lumine-design-system.css" />
-  <link rel="stylesheet" href="styles.css" />
+  <!-- CACHE-BUSTING: o ?v=AAAAMMDD<letra> força os navegadores a buscarem JS/CSS
+       novos a cada deploy (o HTML é sempre revalidado). SEMPRE incremente a letra
+       (a→b→c...) ao alterar script.js / styles.css / config.js / seed-data.js /
+       lumine-design-system.css, senão os usuários ficam com versão em cache (até 4h). -->
+  <link rel="stylesheet" href="lumine-design-system.css?v=20260603a" />
+  <link rel="stylesheet" href="styles.css?v=20260603a" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/css/jsvectormap.min.css" />
 </head>
 <body>
@@ -972,9 +976,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/maps/world.js"></script>
-  <script src="config.js"></script>
+  <script src="config.js?v=20260603a"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="seed-data.js"></script>
-  <script src="script.js"></script>
+  <script src="seed-data.js?v=20260603a"></script>
+  <script src="script.js?v=20260603a"></script>
 </body>
 </html>
