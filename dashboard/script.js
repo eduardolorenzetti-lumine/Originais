@@ -1068,14 +1068,21 @@ async function syncCurrentUserFromSupabaseSession({ persistUsers = true } = {}) 
   }
   currentUserId = email;
   const current = getCurrentUser();
-  if (!current || current.active === false) {
-    if ((!refreshedUsers && cachedAuthorizedUser?.active !== false) || currentSecureUser?.active !== false) {
-      clearLoginError();
-      return true;
-    }
+  // Autorização: o usuário precisa existir em app_users e estar ativo. Aceita-se
+  // como fontes de confiança (nesta ordem): o registro carregado na lista, a leitura
+  // direta do próprio usuário, ou — APENAS quando o refresh da lista falhou
+  // (rede) — o registro em cache. Sem nenhuma dessas, o acesso é negado, evitando
+  // que um e-mail autenticado mas ausente de app_users entre num estado quebrado.
+  const currentSecureActive = Boolean(currentSecureUser && currentSecureUser.active !== false);
+  const cachedActive = Boolean(cachedAuthorizedUser && cachedAuthorizedUser.active !== false);
+  const authorized =
+    (current && current.active !== false) ||
+    currentSecureActive ||
+    (!refreshedUsers && cachedActive);
+  if (!authorized) {
     await getSupabaseClient().auth.signOut();
     currentUserId = "";
-    showLoginError("Seu e-mail não está autorizado para acessar a plataforma.");
+    showLoginError("Seu e-mail não está autorizado para acessar a plataforma. Entre em contato com o administrador.");
     return false;
   }
   clearLoginError();
@@ -8697,12 +8704,31 @@ async function setUserPasswordAsAdmin(targetEmail, password, { sendInvite = fals
 }
 
 async function deleteSecureUserFromSupabase(email) {
-  const client = getSupabaseClient();
-  if (!client?.auth || typeof client.from !== "function") throw new Error("Supabase Auth indisponível.");
   const normalizedEmail = normalizeUserEmail(email);
   if (!normalizedEmail) return;
-  const { error } = await client.from(SUPABASE_USERS_TABLE).delete().eq("email", normalizedEmail);
-  if (error) throw error;
+  // Exclusão COMPLETA via Edge Function (service role): remove de auth.users E de
+  // app_users. Antes, deletava só de app_users, deixando a conta de autenticação
+  // órfã — o que impedia recadastrar o e-mail (convite dava "já registrado") e
+  // mantinha um login válido para um usuário "excluído".
+  const { url, anonKey } = getSupabaseConfig();
+  const accessToken = supabaseAuthSession?.access_token;
+  if (!url || !accessToken) throw new Error("Sessão não encontrada. Faça login novamente.");
+  const functionUrl = `${url.replace(/\/+$/, "")}/functions/v1/set-user-password`;
+  const response = await fetch(functionUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${accessToken}`,
+      "apikey": anonKey
+    },
+    body: JSON.stringify({ action: "delete", targetEmail: normalizedEmail })
+  });
+  const text = await response.text().catch(() => "");
+  let data = {};
+  try { data = JSON.parse(text); } catch (_) {}
+  if (!response.ok || data?.error) {
+    throw new Error(data?.error || `Erro HTTP ${response.status}: ${text.slice(0, 120)}`);
+  }
 }
 
 async function refreshSecureUsersFromSupabase({ persist = true } = {}) {
