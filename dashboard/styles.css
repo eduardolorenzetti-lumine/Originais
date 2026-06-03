@@ -3774,7 +3774,7 @@ textarea:focus,
   align-items: flex-end;
   gap: 10px;
   min-height: 140px;
-  padding: 20px 0 4px;
+  padding: 20px 0 28px;
 }
 
 .cbar-col {
