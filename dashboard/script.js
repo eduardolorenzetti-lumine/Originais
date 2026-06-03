@@ -1531,13 +1531,31 @@ function injectDialogCloseButtons() {
   document.querySelectorAll("dialog").forEach((dlg) => {
     const heading = dlg.querySelector("h2, h3");
     if (!heading || heading.querySelector(".dialog-close-btn")) return;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "dialog-close-btn";
-    btn.setAttribute("aria-label", "Fechar");
-    btn.innerHTML = closeSvg;
-    btn.onclick = () => dlg.close();
-    heading.appendChild(btn);
+
+    // Envolve o texto existente em span com flex:1 para empurrar botões à direita
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "dialog-title-text";
+    while (heading.firstChild) titleSpan.appendChild(heading.firstChild);
+    heading.appendChild(titleSpan);
+
+    // Botão Salvar no header (replica o submit do dialog)
+    const submitBtn = dlg.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "submit";
+      saveBtn.className = "btn accent dialog-header-save-btn";
+      saveBtn.textContent = submitBtn.textContent?.trim() || "Salvar";
+      heading.appendChild(saveBtn);
+    }
+
+    // Botão X
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "dialog-close-btn";
+    closeBtn.setAttribute("aria-label", "Fechar");
+    closeBtn.innerHTML = closeSvg;
+    closeBtn.onclick = () => dlg.close();
+    heading.appendChild(closeBtn);
   });
 }
 
