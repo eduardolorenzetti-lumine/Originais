@@ -805,14 +805,20 @@ function bindAuthActions() {
           return;
         }
       }
-      // Garante que a lista de usuários está carregada antes de checar o e-mail.
-      // Isso evita falsos bloqueios causados por race condition no carregamento inicial.
-      if (!secureUsersLoaded) {
+      // Revalida a lista de e-mails autorizados direto do banco a CADA tentativa de
+      // login, evitando bloqueio falso por cache desatualizado (ex.: usuário recém
+      // cadastrado que ainda não estava na lista em memória). Só bloqueia quando a
+      // leitura fresca confirma que o e-mail não está na tabela app_users; se a
+      // leitura falhar, deixa o próprio Supabase Auth decidir.
+      let authorizedEmails = null;
+      try {
         const fresh = await fetchSecureUsersFromSupabase();
-        if (fresh && fresh.length > 0) setManagedUsers(fresh, { persist: false });
-      }
-      const knownEmails = (state.users || []).map((u) => normalizeUserEmail(u.email));
-      if (knownEmails.length && !knownEmails.includes(email)) {
+        if (fresh && fresh.length > 0) {
+          setManagedUsers(fresh, { persist: false });
+          authorizedEmails = fresh.map((u) => normalizeUserEmail(u.email));
+        }
+      } catch (_) {}
+      if (authorizedEmails && !authorizedEmails.includes(email)) {
         showLoginError("E-mail não cadastrado no sistema. Entre em contato com o administrador.");
         return;
       }
@@ -4727,27 +4733,18 @@ function openUserDialog(userId = null) {
 
   if (isRemoteSupabaseAuthEnabled()) {
     if (isNewUser && isAdmin) {
-      // Novo usuário: mostrar toggle "Definir senha provisória"
-      if (toggleRow) toggleRow.hidden = false;
-      if (toggleChk) {
-        toggleChk.checked = false;
-        toggleChk.onchange = () => {
-          const show = toggleChk.checked;
-          if (pwdFields) pwdFields.hidden = !show;
-          pwdInput.disabled = !show;
-          pwdConfirmInput.disabled = !show;
-          if (!show) { pwdInput.value = ""; pwdConfirmInput.value = ""; }
-          // Converter para type="password" apenas quando visível
-          pwdInput.type = show ? "password" : "text";
-          pwdConfirmInput.type = show ? "password" : "text";
-        };
-      }
-      if (pwdFields) pwdFields.hidden = true;
-      pwdInput.disabled = true;
-      pwdConfirmInput.disabled = true;
+      // Novo usuário: senha provisória OBRIGATÓRIA (modelo provisional-only).
+      // Sem toggle e sem caminho de convite por e-mail — o admin sempre define a
+      // senha e compartilha com o usuário, que pode trocá-la depois.
+      if (toggleRow) toggleRow.hidden = true;
+      if (pwdFields) pwdFields.hidden = false;
+      pwdInput.disabled = false;
+      pwdConfirmInput.disabled = false;
+      pwdInput.type = "password";
+      pwdConfirmInput.type = "password";
       if (pwdLabelText) pwdLabelText.textContent = "Senha provisória";
       if (pwdConfirmLabelText) pwdConfirmLabelText.textContent = "Confirmar senha provisória";
-      if (pwdHint) pwdHint.textContent = "Defina uma senha provisória para o novo usuário. No primeiro login ele será obrigado a criar uma nova senha.";
+      if (pwdHint) pwdHint.textContent = "Defina uma senha provisória (mín. 6 caracteres) e compartilhe com o usuário. Ele poderá trocá-la depois em 'Esqueci minha senha' ou no próprio perfil.";
     } else if (isOwnProfile) {
       // Próprio perfil: sempre mostra campos de senha
       if (toggleRow) toggleRow.hidden = true;
@@ -4845,10 +4842,13 @@ function collectUserForm() {
       alert("Para trocar o e-mail, cadastre um novo usuário e desative/exclua o anterior.");
       return null;
     }
+    // Novo usuário remoto: senha provisória obrigatória (sem convite por e-mail).
+    if (isNewRemoteUser && (!password || password.length < 6)) {
+      alert("Defina uma senha provisória (mínimo 6 caracteres) para o novo usuário.");
+      return null;
+    }
     const toggleChk = document.getElementById("userSetPassword");
-    const usePassword = Boolean(toggleChk?.checked) || isOwnProfile;
-    // Novo usuário sem senha → modo convite por e-mail
-    const sendInvite = isNewRemoteUser && !usePassword;
+    const usePassword = isNewRemoteUser || Boolean(toggleChk?.checked) || isOwnProfile;
     const isAdminResettingAnotherUser = Boolean(isAdmin && existing && !isOwnProfile && password);
     const firstAccessPending = isNewRemoteUser || isAdminResettingAnotherUser
       ? true
@@ -4861,7 +4861,7 @@ function collectUserForm() {
       active: true,
       invitedAt: existing?.invitedAt || new Date().toISOString(),
       password: usePassword ? (password || "") : "",
-      sendInvite,
+      sendInvite: false,
       firstAccessPending
     };
   }
