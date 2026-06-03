@@ -37,11 +37,14 @@ Categorias: `BUG_FIX` | `DATA_RECOVERY` | `FEATURE` | `DB_SCHEMA` | `DATA_CORREC
 - **Frontend** (`script.js`): senha provisória obrigatória para novo usuário (removido o toggle/▶ convite quebrado); login revalida e-mails autorizados ao vivo a cada tentativa; lógica de autorização exige registro ativo em `app_users` (cache só como fallback de rede); exclusão passa a chamar a Edge Function (exclusão completa).
 - **Edge Function `set-user-password` v5:** adicionado `action: "delete"` (service role) que remove de `auth.users` E `app_users`, com proteção contra auto-exclusão.
 - **RLS:** removidas as 4 políticas `USING(true)` de `app_users`. Restam apenas `*_admin` (escrita só ADMIN) e `*_self` (usuário lê/edita o próprio registro, sem poder mudar role/ativo). Fecha a escalada de privilégio.
+- **Constraint `app_users_role_check`:** só aceitava `ADMIN`/`EDITOR`/`LEITOR` — então o papel **`EDITOR ROTA`** (oferecido pelo frontend) **nunca pôde ser salvo** em produção. Constraint recriada incluindo `EDITOR ROTA`.
 - Edge Function `temp-reset-admin` já estava neutralizada (retorna 410).
 
 **Modelo de onboarding definido:** senha provisória (admin define e compartilha; usuário troca depois em "Esqueci minha senha" / perfil).
 
-**Pendências sinalizadas:** `mariana.lopez@lumine.tv` órfã (em `auth.users`, fora de `app_users`); revisão do cache local (localStorage/IndexedDB) que causa relatos de "dados diferentes".
+**Usuários reconciliados (auth.users ↔ app_users, todos ativos com login e senha):** eduardo.lorenzetti (ADMIN), gustavo.leite (ADMIN), aline.santos (EDITOR), jordana.bastos (EDITOR), mariana.lopez (EDITOR ROTA — órfã resolvida, senha `Mariana@2026`), lautierre.souza (LEITOR).
+
+**Pendência restante:** revisão do cache local (localStorage/IndexedDB) que causa relatos de "dados diferentes" — tema separado, não tratado nesta auditoria.
 
 **Feito por:** Claude (Opus 4.8), com aprovação do usuário
 
