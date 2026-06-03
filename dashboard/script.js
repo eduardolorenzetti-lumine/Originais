@@ -1532,13 +1532,7 @@ function injectDialogCloseButtons() {
     const heading = dlg.querySelector("h2, h3");
     if (!heading || heading.querySelector(".dialog-close-btn")) return;
 
-    // Envolve o texto existente em span com flex:1 para empurrar botões à direita
-    const titleSpan = document.createElement("span");
-    titleSpan.className = "dialog-title-text";
-    while (heading.firstChild) titleSpan.appendChild(heading.firstChild);
-    heading.appendChild(titleSpan);
-
-    // Botão Salvar no header (replica o submit do dialog)
+    // Botão Salvar (replica o submit do dialog)
     const submitBtn = dlg.querySelector('button[type="submit"]');
     if (submitBtn) {
       const saveBtn = document.createElement("button");

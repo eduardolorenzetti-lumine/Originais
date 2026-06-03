@@ -3407,7 +3407,9 @@ dialog h2 {
   z-index: 1;
 }
 
-.dialog-title-text {
+/* span interno do título — empurra botões para a direita */
+dialog h2 > span:first-child,
+dialog h3 > span:first-child {
   flex: 1;
   min-width: 0;
 }
