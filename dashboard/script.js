@@ -512,6 +512,9 @@ function bindGlobalActions() {
 
   const refreshFromSupabaseOnReturn = async () => {
     if (!isRemoteSupabaseAuthEnabled() || !supabaseAuthSession?.access_token) return;
+    // Não puxa o estado remoto por cima de alterações locais ainda não
+    // sincronizadas — evitaria perder um item recém-criado/editado.
+    if (queuedSupabaseStateRaw || supabaseSyncInFlight) return;
     const stateChanged = await refreshStateFromSupabaseNow();
     let usersChanged = false;
     try {
@@ -5289,25 +5292,10 @@ function addConfigItem() {
     alert("Perfil LEITOR possui apenas visualização.");
     return;
   }
-  if (selectedConfigKey === "stages") {
-    openConfigItemDialog("__new__");
-    return;
-  } else {
-    const label = CONFIG_SINGULAR_META[selectedConfigKey];
-    const value = prompt(`Novo ${label}:`);
-    if (!value || !value.trim()) return;
-    const nextValue = value.trim();
-    if (isProtectedConfigItem(selectedConfigKey, nextValue)) {
-      alert("Esse item é fixo do sistema e já está disponível.");
-      return;
-    }
-    state.settings[selectedConfigKey].push(nextValue);
-    if (COLOR_CONFIG_KEYS.has(selectedConfigKey)) {
-      setConfigItemColor(selectedConfigKey, nextValue, getConfigItemColor(selectedConfigKey, nextValue, state.settings[selectedConfigKey].length - 1));
-    }
-  }
-  saveState();
-  renderAll();
+  // Usa o dialog (em vez do prompt nativo) para TODOS os tipos. O prompt nativo
+  // disparava blur/focus na janela, acionando o refresh remoto que sobrescrevia
+  // o item recém-adicionado antes de sincronizar.
+  openConfigItemDialog("__new__");
 }
 
 function editConfigItem(id) {
@@ -5380,6 +5368,9 @@ function openConfigItemDialog(id) {
       currentColor = stage.color || randomColor();
       currentSingleDay = isSingleDayStage(stage);
     }
+  } else if (isNew) {
+    currentName = "";
+    currentColor = randomColor();
   } else {
     const idx = Number(id);
     const item = state.settings[key]?.[idx];
@@ -5392,7 +5383,7 @@ function openConfigItemDialog(id) {
     currentColor = getConfigItemColor(key, item, idx);
   }
 
-  title.textContent = isNew ? `Nova ${CONFIG_META[key]}` : `Editar ${CONFIG_META[key]}`;
+  title.textContent = isNew ? `Adicionar ${CONFIG_META[key]}` : `Editar ${CONFIG_META[key]}`;
   document.getElementById("configItemKey").value = key;
   document.getElementById("configItemId").value = id;
   nameInput.value = currentName;
@@ -5434,6 +5425,19 @@ function saveConfigItemDialog() {
     stage.name = nextName;
     if (hasColor) stage.color = nextColor;
     stage.singleDay = nextSingleDay;
+  } else if (id === "__new__") {
+    if (!Array.isArray(state.settings[key])) state.settings[key] = [];
+    const arr = state.settings[key];
+    if (isProtectedConfigItem(key, nextName)) {
+      alert("Esse item é fixo do sistema e já está disponível.");
+      return;
+    }
+    if (arr.some((v) => String(v).trim().toLowerCase() === nextName.toLowerCase())) {
+      alert("Já existe um item com esse nome.");
+      return;
+    }
+    arr.push(nextName);
+    if (hasColor) setConfigItemColor(key, nextName, nextColor);
   } else {
     const arr = state.settings[key] || [];
     const idx = Number(id);
