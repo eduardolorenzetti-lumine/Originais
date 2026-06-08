@@ -2457,6 +2457,8 @@ tbody tr:hover {
 :root[data-theme="dark"] tbody tr:hover td,
 :root[data-theme="dark"] tbody tr:hover td span,
 :root[data-theme="dark"] tbody tr:hover td a,
+:root[data-theme="dark"] tbody tr:hover td select,
+:root[data-theme="dark"] tbody tr:hover .isel,
 :root[data-theme="dark"] tbody tr:hover .project-title-main,
 :root[data-theme="dark"] tbody tr:hover .cell-link-edit {
   color: #1f2937 !important;
@@ -2469,6 +2471,25 @@ tbody tr:hover {
 /* Ícones de ação (editar/excluir) escuros sobre o fundo branco do hover */
 :root[data-theme="dark"] tbody tr:hover .act-btn {
   color: #374151 !important;
+}
+
+/* Barra superior (nav): é uma barra preta por design (logo branco). No dark mode
+   o var(--black) inverte para claro e deixava a barra branca — forçamos preto e
+   o texto/links claros para manter o contraste. */
+:root[data-theme="dark"] .nav {
+  background: #0f1115;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="dark"] .nav-logo,
+:root[data-theme="dark"] .nav-logo strong,
+:root[data-theme="dark"] .nav-logo em {
+  color: #f5f7fa;
+}
+:root[data-theme="dark"] .nav-link:hover {
+  color: #ffffff;
+}
+:root[data-theme="dark"] .nav-avatar {
+  color: #0f1115;
 }
 
 .projects-table-wrap thead th {
