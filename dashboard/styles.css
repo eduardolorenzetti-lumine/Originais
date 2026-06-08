@@ -2459,16 +2459,16 @@ tbody tr:hover {
 :root[data-theme="dark"] tbody tr:hover td a,
 :root[data-theme="dark"] tbody tr:hover .project-title-main,
 :root[data-theme="dark"] tbody tr:hover .cell-link-edit {
-  color: #1f2937;
+  color: #1f2937 !important;
 }
 
 :root[data-theme="dark"] tbody tr:hover .project-title-meta-year {
-  color: #6b7280;
+  color: #6b7280 !important;
 }
 
 /* Ícones de ação (editar/excluir) escuros sobre o fundo branco do hover */
 :root[data-theme="dark"] tbody tr:hover .act-btn {
-  color: #374151;
+  color: #374151 !important;
 }
 
 .projects-table-wrap thead th {
