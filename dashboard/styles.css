@@ -2450,6 +2450,27 @@ tbody tr:hover {
   background: #FAFAF8;
 }
 
+/* Dark mode: no hover a linha fica com fundo branco, então o texto precisa virar
+   escuro para manter contraste. Os pills coloridos (.isel = <select>) mantêm a
+   cor própria; aqui escurecemos apenas o texto comum (SKU, título, células de
+   rota/usuários, links e ícones de ação). Vale para projetos, rota e usuários. */
+:root[data-theme="dark"] tbody tr:hover td,
+:root[data-theme="dark"] tbody tr:hover td span,
+:root[data-theme="dark"] tbody tr:hover td a,
+:root[data-theme="dark"] tbody tr:hover .project-title-main,
+:root[data-theme="dark"] tbody tr:hover .cell-link-edit {
+  color: #1f2937;
+}
+
+:root[data-theme="dark"] tbody tr:hover .project-title-meta-year {
+  color: #6b7280;
+}
+
+/* Ícones de ação (editar/excluir) escuros sobre o fundo branco do hover */
+:root[data-theme="dark"] tbody tr:hover .act-btn {
+  color: #374151;
+}
+
 .projects-table-wrap thead th {
   position: sticky;
   top: 0;
