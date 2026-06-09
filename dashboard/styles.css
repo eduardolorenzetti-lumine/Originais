@@ -3426,6 +3426,11 @@ dialog {
   overflow-y: auto;
 }
 
+/* Editor de data de lançamento: só um campo de data — janela compacta */
+dialog.release-date-dialog {
+  width: min(360px, 92vw);
+}
+
 /* Centraliza qualquer <dialog> modal com position:fixed para garantir
    centralização vertical e horizontal em todos os browsers. */
 dialog[open] {
