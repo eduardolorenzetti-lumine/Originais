@@ -905,10 +905,10 @@ textarea {
 }
 
 .dashboard-filters {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 10px;
+  background: var(--white);
+  border: 0.5px solid var(--pale);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
   margin-bottom: 10px;
   display: grid;
   gap: 10px;
@@ -1591,6 +1591,12 @@ textarea {
   gap: 10px;
   flex-wrap: wrap;
 }
+
+/* Dashboard: botão "Exportar PDF" colado na ponta direita do header */
+#dashboard .page-header > .header-actions {
+  margin-left: auto;
+}
+
 
 /* ── View toggle: acabamento correto ── */
 #dashboardViewTabs.view-toggle {

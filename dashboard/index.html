@@ -11,8 +11,8 @@
        (mesma para todos os 5 assets locais) ao alterar script.js / styles.css /
        config.js / seed-data.js / lumine-design-system.css, senão os usuários
        ficam com versão em cache (até 4h). -->
-  <link rel="stylesheet" href="lumine-design-system.css?v=20260608b" />
-  <link rel="stylesheet" href="styles.css?v=20260608b" />
+  <link rel="stylesheet" href="lumine-design-system.css?v=20260608d" />
+  <link rel="stylesheet" href="styles.css?v=20260608d" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/css/jsvectormap.min.css" />
 </head>
 <body>
@@ -123,12 +123,14 @@
             <div class="page-title-row">
               <h1 class="page-title">Dashboard</h1>
               <div id="dashboardViewTabs" class="view-toggle"></div>
-              <button id="btnExportReport" class="btn light export-report-btn" type="button" title="Exportar relatório em PDF">
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z"/></svg>
-                <span>Exportar PDF</span>
-              </button>
             </div>
             <p class="page-subtitle">Produções | Lumine Studios</p>
+          </div>
+          <div class="header-actions">
+            <button id="btnExportReport" class="btn light export-report-btn" type="button" title="Exportar relatório em PDF">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z"/></svg>
+              <span>Exportar PDF</span>
+            </button>
           </div>
         </header>
 
@@ -142,14 +144,14 @@
         </div>
 
         <div class="dashboard-top-controls" id="dashboardProdControls">
-          <div class="year-inline">
-            <strong>ANO:</strong>
-            <div id="yearChips" class="chips"></div>
-          </div>
           <button id="dashboardFiltersToggle" class="btn light filter-toggle-btn">Filtros <span class="filter-arrow" aria-hidden="true"></span></button>
         </div>
 
         <section id="dashboardFiltersPanel" class="dashboard-filters" hidden>
+          <div class="filter-row">
+            <strong>Ano:</strong>
+            <div id="yearChips" class="chips"></div>
+          </div>
           <div class="filter-row">
             <strong>Status:</strong>
             <div id="dashboardStatusChips" class="chips"></div>
@@ -362,16 +364,16 @@
         </header>
 
         <div class="dashboard-top-controls">
-          <div class="year-inline">
-            <strong>ANO:</strong>
-            <div id="timelineYears" class="chips"></div>
-          </div>
           <div class="header-actions">
             <button id="btnFilterGantt" class="btn light filter-toggle-btn">Filtros <span class="filter-arrow" aria-hidden="true"></span></button>
           </div>
         </div>
 
         <section id="ganttFiltersPanel" class="dashboard-filters" hidden>
+          <div class="filter-row">
+            <strong>Ano:</strong>
+            <div id="timelineYears" class="chips"></div>
+          </div>
           <div class="filter-row">
             <strong>Status:</strong>
             <div id="ganttStatusChips" class="chips"></div>
@@ -448,16 +450,16 @@
           </header>
 
           <div class="dashboard-top-controls">
-            <div class="year-inline">
-              <strong>ANO:</strong>
-              <div id="projectYears" class="chips"></div>
-            </div>
             <div class="header-actions">
               <button id="btnFilterProjects" class="btn light filter-toggle-btn">Filtros <span class="filter-arrow" aria-hidden="true"></span></button>
             </div>
           </div>
 
           <section id="projectFiltersPanel" class="dashboard-filters" hidden>
+            <div class="filter-row">
+              <strong>Ano:</strong>
+              <div id="projectYears" class="chips"></div>
+            </div>
             <div class="filter-row">
               <strong>Status:</strong>
               <div id="projectStatusChips" class="chips"></div>
@@ -979,9 +981,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/maps/world.js"></script>
-  <script src="config.js?v=20260608b"></script>
+  <script src="config.js?v=20260608d"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="seed-data.js?v=20260608b"></script>
-  <script src="script.js?v=20260608b"></script>
+  <script src="seed-data.js?v=20260608d"></script>
+  <script src="script.js?v=20260608d"></script>
 </body>
 </html>
