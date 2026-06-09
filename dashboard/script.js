@@ -5484,6 +5484,9 @@ function saveConfigItemDialog() {
     if (!current) return;
     if (isProtectedConfigItem(key, current)) return;
     arr[idx] = nextName;
+    // Propaga o novo nome para os registros vinculados (projetos/rotas), senão
+    // eles ficariam apontando para um valor de status/categoria/etc. inexistente.
+    if (current !== nextName) propagateConfigRename(key, current, nextName);
     if (hasColor) {
       if (current !== nextName) renameConfigItemColor(key, current, nextName, idx);
       setConfigItemColor(key, nextName, nextColor);
@@ -5492,6 +5495,49 @@ function saveConfigItemDialog() {
 
   saveState();
   renderAll();
+}
+
+// Ao renomear um item de configuração referenciado por NOME (status, categoria,
+// formato, natureza, duração, distribuição, status/exclusividade de rota), atualiza
+// todos os registros vinculados para o novo nome — evitando que projetos/rotas
+// percam o vínculo e fiquem "em branco".
+function propagateConfigRename(key, oldName, newName) {
+  const prev = String(oldName || "").trim();
+  const next = String(newName || "").trim();
+  if (!prev || prev === next) return;
+
+  const projectFieldAliases = {
+    statuses: ["status"],
+    categories: ["category", "categoria"],
+    formats: ["format", "formato", "productionType", "production_type"],
+    natures: ["nature", "natureza"],
+    durations: ["duration", "duracao"]
+  }[key];
+
+  if (projectFieldAliases) {
+    (state.projects || []).forEach((p) => {
+      projectFieldAliases.forEach((field) => {
+        if (String(p?.[field] ?? "").trim() === prev) p[field] = next;
+      });
+    });
+  }
+
+  if (key === "distributions") {
+    (state.projects || []).forEach((p) => {
+      if (Array.isArray(p.distributions)) {
+        p.distributions = p.distributions.map((d) => (String(d).trim() === prev ? next : d));
+      } else if (typeof p.distributions === "string" && p.distributions.trim() === prev) {
+        p.distributions = next;
+      }
+    });
+  }
+
+  if (key === "routeStatuses") {
+    (state.routes || []).forEach((it) => { if (String(it?.status ?? "").trim() === prev) it.status = next; });
+  }
+  if (key === "routeExclusivities") {
+    (state.routes || []).forEach((it) => { if (String(it?.exclusivity ?? "").trim() === prev) it.exclusivity = next; });
+  }
 }
 
 function initConfigDragAndDrop(list) {
