@@ -23,6 +23,13 @@ Categorias: `BUG_FIX` | `DATA_RECOVERY` | `FEATURE` | `DB_SCHEMA` | `DATA_CORREC
 
 ---
 
+### [2026-06-09] — DATA_CORRECTION + BUG_FIX
+**Datas de lançamento:** As `releaseDate` estavam quase todas como `<ano>-01-01` (defaults do `inferReleaseDate` gerados quando o campo se perdeu). Restauradas a partir da coluna "Lançamento" da planilha de controle (fonte de verdade), casando por SKU e por título nos duplicados (02-08 Infernum/Purgatório; 02-67 ambos = 14/04/2025). Resultado: **66 projetos com data real**, **37 sem data** (incubados/pré/pós — campo limpo com `""` explícito para não re-inferir). Os 2 que ficaram em dia 01 são datas reais (02-22, 02-43). O campo `year` de cada lançado foi alinhado ao ano da data.
+**Calendário da timeline:** `openReleaseDateEditor` usava input date nativo + `showPicker()`, e o calendário abria no canto. Agora abre um dialog modal (`#releaseDateDialog`) centralizado, com backdrop escurecido e botões X + Salvar.
+**Feito por:** Claude (Opus 4.8), com aprovação do usuário
+
+---
+
 ### [2026-06-09] — BUG_FIX + DB_SCHEMA
 **O que foi feito:** Corrigida a impossibilidade de **excluir etapas** (timeline e dialog do projeto).
 **Causa-raiz:** Não era o frontend — eram os triggers de proteção. O `protect_projects_before_save` (BEFORE) mantinha o array de `stages` "mais completo" (`CASE WHEN qtd_no_banco > qtd_entrante THEN proj.stages`), então toda exclusão (estado com menos etapas) era **revertida**. O `sync_projects_after_save` (AFTER) também preservava o array mais longo no espelho.
