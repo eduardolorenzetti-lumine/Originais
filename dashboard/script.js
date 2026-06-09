@@ -3930,7 +3930,7 @@ function renderProjectsTable() {
 
   const body = document.getElementById("projectsTableBody");
   if (!projects.length) {
-    body.innerHTML = '<tr><td colspan="12" class="empty">Nenhum projeto encontrado.</td></tr>';
+    body.innerHTML = '<tr><td colspan="11" class="empty">Nenhum projeto encontrado.</td></tr>';
     return;
   }
 
@@ -3970,7 +3970,6 @@ function renderProjectsTable() {
         <td>${editable ? inlineSelect("duration", p.id, getProjectField(p, "duration"), durations) : escapeHtml(getProjectField(p, "duration") || "—")}</td>
         ${PROJECT_FLAG_FIELDS.map((field) => `<td>${renderFlagCell(p, field.key)}</td>`).join("")}
         <td>${editable ? inlineSelect("status", p.id, getProjectField(p, "status"), statuses, badgeClass) : escapeHtml(getProjectField(p, "status") || "—")}</td>
-        <td>${renderDistributionCell(p)}</td>
         <td>
           ${
             editable

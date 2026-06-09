@@ -2562,19 +2562,10 @@ tbody tr:hover {
   text-align: center;
 }
 
-/* 10 = Status */
+/* 10 = Status (11 = Ações usa largura padrão; coluna Distribuição removida) */
 .projects-table-wrap th:nth-child(10),
 .projects-table-wrap td:nth-child(10) {
   min-width: 112px;
-}
-
-/* 11 = Distribuição */
-.projects-table-wrap th:nth-child(11),
-.projects-table-wrap td:nth-child(11) {
-  width: 92px;
-  min-width: 92px;
-  white-space: nowrap;
-  text-align: center;
 }
 
 .route-toolbar {
