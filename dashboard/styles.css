@@ -1598,8 +1598,9 @@ textarea {
 }
 
 
-/* ── View toggle: acabamento correto ── */
-#dashboardViewTabs.view-toggle {
+/* ── View toggle: acabamento correto (Dashboard e Projetos) ── */
+#dashboardViewTabs.view-toggle,
+#projectViewTabs.view-toggle {
   overflow: visible;
   background: none;
   border: none;
@@ -1607,22 +1608,31 @@ textarea {
   margin-left: 24px;
 }
 
-#dashboardViewTabs .view-toggle-btn {
+/* Projetos: botões um pouco mais à direita */
+#projectViewTabs.view-toggle {
+  margin-left: 40px;
+}
+
+#dashboardViewTabs .view-toggle-btn,
+#projectViewTabs .view-toggle-btn {
   background: var(--surface);
   border: 1px solid var(--line);
   border-right-width: 0;
 }
 
-#dashboardViewTabs .view-toggle-btn:first-child {
+#dashboardViewTabs .view-toggle-btn:first-child,
+#projectViewTabs .view-toggle-btn:first-child {
   border-radius: 6px 0 0 6px;
 }
 
-#dashboardViewTabs .view-toggle-btn:last-child {
+#dashboardViewTabs .view-toggle-btn:last-child,
+#projectViewTabs .view-toggle-btn:last-child {
   border-radius: 0 6px 6px 0;
   border-right-width: 1px;
 }
 
-#dashboardViewTabs .view-toggle-btn.active {
+#dashboardViewTabs .view-toggle-btn.active,
+#projectViewTabs .view-toggle-btn.active {
   background: var(--text);
   color: var(--bg);
   border-color: var(--text);
