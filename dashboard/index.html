@@ -11,8 +11,8 @@
        (mesma para todos os 5 assets locais) ao alterar script.js / styles.css /
        config.js / seed-data.js / lumine-design-system.css, senão os usuários
        ficam com versão em cache (até 4h). -->
-  <link rel="stylesheet" href="lumine-design-system.css?v=20260608k" />
-  <link rel="stylesheet" href="styles.css?v=20260608k" />
+  <link rel="stylesheet" href="lumine-design-system.css?v=20260608l" />
+  <link rel="stylesheet" href="styles.css?v=20260608l" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/css/jsvectormap.min.css" />
 </head>
 <body>
@@ -946,6 +946,21 @@
     </form>
   </dialog>
 
+  <dialog id="releaseDateDialog" class="release-date-dialog">
+    <form id="releaseDateForm" method="dialog">
+      <h3>Data de Lançamento</h3>
+      <input type="hidden" id="releaseDateProjectId" />
+      <p id="releaseDateProjectLabel" class="dialog-hint"></p>
+      <label>Data
+        <input id="releaseDateInput" type="date" lang="pt-BR" />
+      </label>
+      <menu class="dialog-actions">
+        <button type="button" id="releaseDateCancelBtn" class="btn light">Cancelar</button>
+        <button type="submit" class="btn accent">Salvar</button>
+      </menu>
+    </form>
+  </dialog>
+
   <dialog id="routeInfoDialog">
     <div class="route-info-header">
       <h3><span id="routeInfoTitle"></span></h3>
@@ -983,9 +998,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/maps/world.js"></script>
-  <script src="config.js?v=20260608k"></script>
+  <script src="config.js?v=20260608l"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="seed-data.js?v=20260608k"></script>
-  <script src="script.js?v=20260608k"></script>
+  <script src="seed-data.js?v=20260608l"></script>
+  <script src="script.js?v=20260608l"></script>
 </body>
 </html>

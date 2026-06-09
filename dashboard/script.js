@@ -1776,6 +1776,32 @@ function bindDialog() {
     renderAll();
   });
 
+  const releaseDateDialog = document.getElementById("releaseDateDialog");
+  const releaseDateForm = document.getElementById("releaseDateForm");
+  if (releaseDateForm && releaseDateDialog) {
+    document.getElementById("releaseDateCancelBtn").addEventListener("click", () => releaseDateDialog.close());
+    releaseDateForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!canEditContent()) {
+        alert("Perfil LEITOR possui apenas visualização.");
+        return;
+      }
+      const projectId = document.getElementById("releaseDateProjectId").value;
+      const project = state.projects.find((p) => p.id === projectId);
+      if (!project) { releaseDateDialog.close(); return; }
+      const next = normalizeDateInput(document.getElementById("releaseDateInput").value);
+      if (next) {
+        project.releaseDate = next;
+        project.year = Number(next.slice(0, 4));
+      } else {
+        project.releaseDate = "";
+      }
+      saveState();
+      releaseDateDialog.close();
+      renderAll();
+    });
+  }
+
   document.getElementById("configItemCancelBtn").addEventListener("click", () => configItemDialog.close());
   configItemForm.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -3661,45 +3687,13 @@ function openReleaseDateEditor(projectId) {
   }
   const project = state.projects.find((p) => p.id === projectId);
   if (!project) return;
-  const normalized = normalizeDateInput(project.releaseDate || "");
-  if (!normalized) return;
-
-  const picker = document.createElement("input");
-  picker.type = "date";
-  picker.lang = "pt-BR";
-  picker.value = normalized;
-  picker.style.position = "fixed";
-  picker.style.opacity = "0";
-  picker.style.pointerEvents = "none";
-  picker.style.width = "1px";
-  picker.style.height = "1px";
-  document.body.appendChild(picker);
-
-  const cleanup = () => picker.remove();
-  picker.addEventListener(
-    "change",
-    () => {
-      const next = normalizeDateInput(picker.value);
-      if (next) {
-        project.releaseDate = next;
-        project.year = Number(next.slice(0, 4));
-        saveState();
-        renderAll();
-      }
-      cleanup();
-    },
-    { once: true }
-  );
-  picker.addEventListener(
-    "blur",
-    () => {
-      setTimeout(cleanup, 0);
-    },
-    { once: true }
-  );
-
-  if (typeof picker.showPicker === "function") picker.showPicker();
-  else picker.click();
+  const dialog = document.getElementById("releaseDateDialog");
+  if (!dialog) return;
+  document.getElementById("releaseDateProjectId").value = project.id;
+  const label = document.getElementById("releaseDateProjectLabel");
+  if (label) label.textContent = `${project.code ? "#" + project.code + " · " : ""}${project.title || ""}`;
+  document.getElementById("releaseDateInput").value = normalizeDateInput(project.releaseDate || "");
+  dialog.showModal();
 }
 
 function halfMonthIndexFromLinePointer(line, event) {
