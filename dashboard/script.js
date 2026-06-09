@@ -1393,6 +1393,11 @@ function ensureAuthSurfaceVisible() {
   const loginView = document.getElementById("loginView");
   const appShell = document.getElementById("appShell");
   if (!loginView || !appShell) return;
+  // Enquanto o Supabase Auth ainda não resolveu, o splash está visível e ambas as
+  // telas ficam ocultas de propósito. NÃO forçar o login aqui — senão o campo de
+  // senha é habilitado por um instante e o gerenciador de senha "pisca" na tela
+  // antes da sessão resolver e o dashboard aparecer.
+  if (isRemoteSupabaseAuthEnabled() && !supabaseAuthReady && !getCurrentUser()) return;
   if (!loginView.hidden || !appShell.hidden) return;
   const user = getCurrentUser();
   loginView.hidden = Boolean(user);
