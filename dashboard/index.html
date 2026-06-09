@@ -11,8 +11,8 @@
        (mesma para todos os 5 assets locais) ao alterar script.js / styles.css /
        config.js / seed-data.js / lumine-design-system.css, senão os usuários
        ficam com versão em cache (até 4h). -->
-  <link rel="stylesheet" href="lumine-design-system.css?v=20260608a" />
-  <link rel="stylesheet" href="styles.css?v=20260608a" />
+  <link rel="stylesheet" href="lumine-design-system.css?v=20260608b" />
+  <link rel="stylesheet" href="styles.css?v=20260608b" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/css/jsvectormap.min.css" />
 </head>
 <body>
@@ -439,7 +439,10 @@
         <div class="projects-top-sticky">
           <header class="page-header">
             <div>
-              <h1 class="page-title">Projetos</h1>
+              <div class="page-title-row">
+                <h1 class="page-title">Projetos</h1>
+                <div id="projectViewTabs" class="view-toggle"></div>
+              </div>
               <p class="page-subtitle">Gerencie suas produções audiovisuais</p>
             </div>
           </header>
@@ -510,7 +513,6 @@
                 <th>Formato</th>
                 <th>Natureza</th>
                 <th>Duração</th>
-                <th>Infantil</th>
                 <th>CPB</th>
                 <th>CRT</th>
                 <th>IMDb</th>
@@ -977,9 +979,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/maps/world.js"></script>
-  <script src="config.js?v=20260608a"></script>
+  <script src="config.js?v=20260608b"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="seed-data.js?v=20260608a"></script>
-  <script src="script.js?v=20260608a"></script>
+  <script src="seed-data.js?v=20260608b"></script>
+  <script src="script.js?v=20260608b"></script>
 </body>
 </html>

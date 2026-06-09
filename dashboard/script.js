@@ -103,6 +103,7 @@ let selectedGanttFilters = {
   projects: new Set()
 };
 let selectedProjectYears = new Set();
+let selectedProjectView = "todos"; // "todos" | "producoes" | "shortdocs"
 let projectFiltersOpen = false;
 let selectedProjectFilters = {
   statuses: new Set(),
@@ -2046,6 +2047,25 @@ function renderDashboardViewTabs() {
   });
 }
 
+function renderProjectViewTabs() {
+  const container = document.getElementById("projectViewTabs");
+  if (!container) return;
+  const options = [
+    { value: "todos", label: "Todos" },
+    { value: "producoes", label: "Produções" },
+    { value: "shortdocs", label: "Short-docs" }
+  ];
+  container.innerHTML = options
+    .map((o) => `<button class="view-toggle-btn ${selectedProjectView === o.value ? "active" : ""}" data-view="${o.value}">${o.label}</button>`)
+    .join("");
+  container.querySelectorAll(".view-toggle-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedProjectView = btn.dataset.view;
+      renderProjectsTable();
+    });
+  });
+}
+
 function renderRouteDashboard() {
   const allRouteItems = state.routes || [];
   const routeProjects = getRouteSelectedProjects();
@@ -3842,11 +3862,15 @@ function renderProjectsTools() {
 
 function renderProjectsTable() {
   const editable = canEditContent();
+  renderProjectViewTabs();
   const query = document.getElementById("projectSearch").value.trim().toLowerCase();
 
-  const projects = sortedProjects(state.projects, "desc").filter((p) => {
+  const filtered = sortedProjects(state.projects, "desc").filter((p) => {
     const hit = !query || String(p.title || "").toLowerCase().includes(query) || String(p.code || "").toLowerCase().includes(query);
     if (!hit) return false;
+    // Aba de visualização: Todos | Produções | Short-docs
+    if (selectedProjectView === "producoes" && isShortDocProject(p)) return false;
+    if (selectedProjectView === "shortdocs" && !isShortDocProject(p)) return false;
     if (selectedProjectYears.size && !selectedProjectYears.has(String(getProjectYear(p)))) return false;
     if (!matchesMultiFilter(getProjectField(p, "status"), selectedProjectFilters.statuses)) return false;
     if (!matchesMultiFilter(getProjectField(p, "category"), selectedProjectFilters.categories)) return false;
@@ -3859,9 +3883,15 @@ function renderProjectsTable() {
     return true;
   });
 
+  // Short-docs vão para o fim da fila (após as produções), preservando a ordem interna.
+  const projects = [
+    ...filtered.filter((p) => !isShortDocProject(p)),
+    ...filtered.filter((p) => isShortDocProject(p))
+  ];
+
   const body = document.getElementById("projectsTableBody");
   if (!projects.length) {
-    body.innerHTML = '<tr><td colspan="13" class="empty">Nenhum projeto encontrado.</td></tr>';
+    body.innerHTML = '<tr><td colspan="12" class="empty">Nenhum projeto encontrado.</td></tr>';
     return;
   }
 
@@ -3899,7 +3929,6 @@ function renderProjectsTable() {
         <td>${editable ? inlineSelect("format", p.id, getProjectField(p, "format"), formats) : escapeHtml(getProjectField(p, "format") || "—")}</td>
         <td>${editable ? inlineSelect("nature", p.id, getProjectField(p, "nature"), natures) : escapeHtml(getProjectField(p, "nature") || "—")}</td>
         <td>${editable ? inlineSelect("duration", p.id, getProjectField(p, "duration"), durations) : escapeHtml(getProjectField(p, "duration") || "—")}</td>
-        <td>${renderFlagCell(p, "infantil")}</td>
         ${PROJECT_FLAG_FIELDS.map((field) => `<td>${renderFlagCell(p, field.key)}</td>`).join("")}
         <td>${editable ? inlineSelect("status", p.id, getProjectField(p, "status"), statuses, badgeClass) : escapeHtml(getProjectField(p, "status") || "—")}</td>
         <td>${renderDistributionCell(p)}</td>

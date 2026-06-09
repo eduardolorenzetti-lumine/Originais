@@ -2527,31 +2527,28 @@ tbody tr:hover {
   min-width: 122px;
 }
 
+/* 7,8,9 = CPB, CRT, IMDb (checkboxes) — coluna Infantil removida da tabela */
 .projects-table-wrap th:nth-child(7),
-.projects-table-wrap td:nth-child(7) {
-  min-width: 98px;
-  white-space: nowrap;
-}
-
+.projects-table-wrap td:nth-child(7),
 .projects-table-wrap th:nth-child(8),
 .projects-table-wrap td:nth-child(8),
 .projects-table-wrap th:nth-child(9),
-.projects-table-wrap td:nth-child(9),
-.projects-table-wrap th:nth-child(10),
-.projects-table-wrap td:nth-child(10) {
+.projects-table-wrap td:nth-child(9) {
   width: 44px;
   min-width: 44px;
   white-space: nowrap;
   text-align: center;
 }
 
-.projects-table-wrap th:nth-child(11),
-.projects-table-wrap td:nth-child(11) {
+/* 10 = Status */
+.projects-table-wrap th:nth-child(10),
+.projects-table-wrap td:nth-child(10) {
   min-width: 112px;
 }
 
-.projects-table-wrap th:nth-child(12),
-.projects-table-wrap td:nth-child(12) {
+/* 11 = Distribuição */
+.projects-table-wrap th:nth-child(11),
+.projects-table-wrap td:nth-child(11) {
   width: 92px;
   min-width: 92px;
   white-space: nowrap;
