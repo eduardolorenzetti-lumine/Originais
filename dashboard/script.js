@@ -104,6 +104,7 @@ let selectedGanttFilters = {
 };
 let selectedProjectYears = new Set();
 let selectedProjectView = "todos"; // "todos" | "producoes" | "shortdocs"
+let selectedTimelineView = "todos"; // "todos" | "producoes" | "shortdocs"
 let projectFiltersOpen = false;
 let selectedProjectFilters = {
   statuses: new Set(),
@@ -2076,6 +2077,25 @@ function renderProjectViewTabs() {
   });
 }
 
+function renderTimelineViewTabs() {
+  const container = document.getElementById("timelineViewTabs");
+  if (!container) return;
+  const options = [
+    { value: "todos", label: "Todos" },
+    { value: "producoes", label: "Produções" },
+    { value: "shortdocs", label: "Short-docs" }
+  ];
+  container.innerHTML = options
+    .map((o) => `<button class="view-toggle-btn ${selectedTimelineView === o.value ? "active" : ""}" data-view="${o.value}">${o.label}</button>`)
+    .join("");
+  container.querySelectorAll(".view-toggle-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedTimelineView = btn.dataset.view;
+      renderGantt();
+    });
+  });
+}
+
 function renderRouteDashboard() {
   const allRouteItems = state.routes || [];
   const routeProjects = getRouteSelectedProjects();
@@ -3098,6 +3118,7 @@ function getProjectYearLabel(project) {
 
 function renderGantt() {
   const editable = canEditContent();
+  renderTimelineViewTabs();
   renderGanttYearChips();
   try {
     renderGanttExtraFilters();
@@ -3110,7 +3131,15 @@ function renderGantt() {
   document.getElementById("timelineEnd").value = state.timeline.end;
 
   const months = monthsBetween(state.timeline.start, state.timeline.end);
-  const list = sortedProjects(filteredGanttProjects(), "desc");
+  let list = sortedProjects(filteredGanttProjects(), "desc");
+  // Aba de visualização: Todos | Produções | Short-docs
+  if (selectedTimelineView === "producoes") list = list.filter((p) => !isShortDocProject(p));
+  else if (selectedTimelineView === "shortdocs") list = list.filter((p) => isShortDocProject(p));
+  // Short-docs sempre no fim da fila (após as produções), preservando a ordem interna.
+  list = [
+    ...list.filter((p) => !isShortDocProject(p)),
+    ...list.filter((p) => isShortDocProject(p))
+  ];
   const container = document.getElementById("ganttContainer");
   const rangeLabel = document.getElementById("timelineRangeLabel");
   if (rangeLabel) rangeLabel.textContent = timelineRangeLabel(state.timeline.start, state.timeline.end);

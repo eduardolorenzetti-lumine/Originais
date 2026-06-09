@@ -1598,9 +1598,10 @@ textarea {
 }
 
 
-/* ── View toggle: acabamento correto (Dashboard e Projetos) ── */
+/* ── View toggle: acabamento correto (Dashboard, Projetos e Cronograma) ── */
 #dashboardViewTabs.view-toggle,
-#projectViewTabs.view-toggle {
+#projectViewTabs.view-toggle,
+#timelineViewTabs.view-toggle {
   overflow: visible;
   background: none;
   border: none;
@@ -1608,31 +1609,36 @@ textarea {
   margin-left: 24px;
 }
 
-/* Projetos: botões um pouco mais à direita */
-#projectViewTabs.view-toggle {
+/* Projetos e Cronograma: botões um pouco mais à direita */
+#projectViewTabs.view-toggle,
+#timelineViewTabs.view-toggle {
   margin-left: 40px;
 }
 
 #dashboardViewTabs .view-toggle-btn,
-#projectViewTabs .view-toggle-btn {
+#projectViewTabs .view-toggle-btn,
+#timelineViewTabs .view-toggle-btn {
   background: var(--surface);
   border: 1px solid var(--line);
   border-right-width: 0;
 }
 
 #dashboardViewTabs .view-toggle-btn:first-child,
-#projectViewTabs .view-toggle-btn:first-child {
+#projectViewTabs .view-toggle-btn:first-child,
+#timelineViewTabs .view-toggle-btn:first-child {
   border-radius: 6px 0 0 6px;
 }
 
 #dashboardViewTabs .view-toggle-btn:last-child,
-#projectViewTabs .view-toggle-btn:last-child {
+#projectViewTabs .view-toggle-btn:last-child,
+#timelineViewTabs .view-toggle-btn:last-child {
   border-radius: 0 6px 6px 0;
   border-right-width: 1px;
 }
 
 #dashboardViewTabs .view-toggle-btn.active,
-#projectViewTabs .view-toggle-btn.active {
+#projectViewTabs .view-toggle-btn.active,
+#timelineViewTabs .view-toggle-btn.active {
   background: var(--text);
   color: var(--bg);
   border-color: var(--text);
