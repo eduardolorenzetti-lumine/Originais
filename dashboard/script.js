@@ -1381,7 +1381,12 @@ function applyAuthVisibility() {
 
 function setLoginPasswordFieldType(visible) {
   const input = document.getElementById("loginPassword");
-  if (input) input.type = visible ? "password" : "text";
+  if (!input) return;
+  input.type = visible ? "password" : "text";
+  // Fora da tela de login (loading, dashboard, etc.) o campo fica desabilitado:
+  // gerenciadores de senha (iCloud Passwords, 1Password) ignoram inputs disabled,
+  // então não aparece mais o popup de "salvar/criar senha" em páginas sem senha.
+  input.disabled = !visible;
 }
 
 function ensureAuthSurfaceVisible() {
