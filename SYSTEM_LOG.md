@@ -23,6 +23,19 @@ Categorias: `BUG_FIX` | `DATA_RECOVERY` | `FEATURE` | `DB_SCHEMA` | `DATA_CORREC
 
 ---
 
+### [2026-06-09] — DB_SCHEMA (Segurança / RLS)
+**O que foi feito:** Corrigido alerta crítico do Supabase (`rls_disabled_in_public`): as tabelas `public.projects` (espelho) e `public.system_log` estavam **sem RLS** → expostas para leitura/escrita/exclusão via API pública por qualquer um com a URL+anon key.
+**Correção:**
+- `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` em `projects` e `system_log` (sem políticas → API pública bloqueada; service role / SQL direto seguem acessando).
+- Como os triggers da `projects` (`protect_projects_before_save` BEFORE, `sync_projects_after_save` AFTER) rodam como o usuário do app, foram convertidos para `SECURITY DEFINER` com `search_path` fixo — assim a sincronização legítima ignora a RLS, mas a API fica bloqueada. Isso também resolveu os avisos de `search_path` dessas funções.
+- `REVOKE EXECUTE` nas duas funções de trigger (anon/authenticated/public) para que não sejam chamáveis via `/rest/v1/rpc/...` (o disparo por trigger não depende dessa permissão).
+- `search_path` fixo também em `private.current_user_email` e `private.set_updated_at`.
+**Verificação:** Leitura anônima de `projects`/`system_log`/`app_state` → `[]` (bloqueada). UPDATE de `app_state` sob role `authenticated` (claim admin) executa sem erro e mantém `projects` íntegro (103). RPC anônimo às trigger fns → 404.
+**Pendência (não crítica):** Aviso WARN `auth_leaked_password_protection` — habilitar no painel (Authentication → Passwords) é opcional. Avaliar aplicar o mesmo hardening de RLS no projeto `originais-dev`.
+**Feito por:** Claude (Opus 4.8)
+
+---
+
 ### [2026-06-09] — DATA_CORRECTION + BUG_FIX
 **Datas de lançamento:** As `releaseDate` estavam quase todas como `<ano>-01-01` (defaults do `inferReleaseDate` gerados quando o campo se perdeu). Restauradas a partir da coluna "Lançamento" da planilha de controle (fonte de verdade), casando por SKU e por título nos duplicados (02-08 Infernum/Purgatório; 02-67 ambos = 14/04/2025). Resultado: **66 projetos com data real**, **37 sem data** (incubados/pré/pós — campo limpo com `""` explícito para não re-inferir). Os 2 que ficaram em dia 01 são datas reais (02-22, 02-43). O campo `year` de cada lançado foi alinhado ao ano da data.
 **Calendário da timeline:** `openReleaseDateEditor` usava input date nativo + `showPicker()`, e o calendário abria no canto. Agora abre um dialog modal (`#releaseDateDialog`) centralizado, com backdrop escurecido e botões X + Salvar.
