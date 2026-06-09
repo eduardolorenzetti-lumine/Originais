@@ -23,6 +23,16 @@ Categorias: `BUG_FIX` | `DATA_RECOVERY` | `FEATURE` | `DB_SCHEMA` | `DATA_CORREC
 
 ---
 
+### [2026-06-09] — BUG_FIX + DB_SCHEMA
+**O que foi feito:** Corrigida a impossibilidade de **excluir etapas** (timeline e dialog do projeto).
+**Causa-raiz:** Não era o frontend — eram os triggers de proteção. O `protect_projects_before_save` (BEFORE) mantinha o array de `stages` "mais completo" (`CASE WHEN qtd_no_banco > qtd_entrante THEN proj.stages`), então toda exclusão (estado com menos etapas) era **revertida**. O `sync_projects_after_save` (AFTER) também preservava o array mais longo no espelho.
+**Correção:** Ambos os triggers passam a **respeitar o array de stages do estado entrante** (frontend como fonte de verdade para etapas). Mantidas as proteções críticas: `spent` nunca reduz (`GREATEST`) e projetos que somem do estado são re-injetados a partir da tabela espelho.
+**Verificação:** Removida 1 etapa do 02-00 (4→3) e confirmado que persistiu (não reverteu); restaurado para 4.
+**Impacto:** Exclusão de etapas volta a funcionar. Proteção de gastos e de projetos intacta.
+**Feito por:** Claude (Opus 4.8)
+
+---
+
 ### [2026-06-03] ~18h30 — BUG_FIX + REFACTOR + DB_SCHEMA (Auditoria do sistema de usuários)
 **Contexto:** Não era possível cadastrar/entrar com novos usuários. Aline e Jordana foram ativadas com senha provisória, não entraram (Aline: "não cadastrado"; Jordana: voltava ao login), foram excluídas e recriadas — e continuaram sem acesso.
 
