@@ -5003,7 +5003,6 @@ function openProjectDialog(projectId = null) {
   const releaseDate = normalizeDateInput(project?.releaseDate || "");
   document.getElementById("projectReleaseDateText").value = releaseDate ? formatDatePtBr(releaseDate) : "";
   document.getElementById("projectReleaseDatePicker").value = releaseDate;
-  document.getElementById("projectNotes").value = project?.notes || "";
   syncProjectYearFromReleaseDate();
 
   const stageWrap = document.getElementById("projectStages");
@@ -5092,7 +5091,7 @@ function collectProjectForm() {
     releaseDate: normalizedReleaseDate,
     // Sincroniza com o campo legado para evitar reexibição do valor após limpar.
     spent: parsedBudget,
-    notes: document.getElementById("projectNotes").value.trim(),
+    notes: existingProject?.notes || "",
     stages
   };
 }
