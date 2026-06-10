@@ -1097,14 +1097,14 @@ textarea {
 .spent-total-display {
   display: flex;
   align-items: center;
-  min-height: 34px;
-  padding: 0 10px;
-  border-radius: var(--radius);
-  background: var(--surface-2);
+  min-height: 32px;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  background: rgba(242, 183, 5, 0.12);
   color: var(--text);
-  font-weight: 600;
-  border: 1px solid var(--line);
-  font-size: 0.95rem;
+  font-weight: 400;
+  border: 0.5px solid rgba(242, 183, 5, 0.35);
+  font-size: 0.82rem;
 }
 
 .spent-total-display.result-positive {
@@ -2533,6 +2533,11 @@ tbody tr:hover {
   font-size: 0.74rem;
 }
 
+/* Títulos das colunas centralizados (Categoria em diante) */
+.projects-table-wrap thead th:nth-child(n+3) {
+  text-align: center;
+}
+
 .projects-table-wrap th:nth-child(2),
 .projects-table-wrap td:nth-child(2) {
   min-width: 210px;
@@ -3506,6 +3511,42 @@ dialog h3 > span:first-child {
 
 #projectForm h2 {
   margin-top: 0;
+}
+
+/* ── Janela de projeto: campos com leve destaque cinza; não-editáveis em âmbar ── */
+#projectForm input:not([type="checkbox"]):not([type="hidden"]),
+#projectForm select,
+#projectForm textarea {
+  background: var(--surface-2);
+}
+#projectForm input[readonly]:not([type="checkbox"]),
+#projectForm input:disabled:not([type="checkbox"]),
+#projectForm select:disabled,
+#projectForm textarea:disabled {
+  background: rgba(242, 183, 5, 0.12);
+  border-color: rgba(242, 183, 5, 0.35);
+  cursor: default;
+}
+
+/* Área de Etapas: padding interno e destaque no título */
+#projectForm > .panel {
+  padding: 14px 16px;
+}
+#projectForm .panel-head h3 {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--mid);
+}
+
+/* Rodapé com os botões: mesmo cinza dos campos, ocupando toda a largura */
+#projectForm .dialog-actions {
+  background: var(--surface-2);
+  margin: 18px -18px -18px;
+  padding: 14px 18px;
+  border-top: 0.5px solid var(--pale);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
 }
 
 .form-grid {

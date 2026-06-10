@@ -3971,9 +3971,6 @@ function renderProjectsTable() {
             <button class="act-btn" data-action="edit" data-id="${p.id}" title="Editar projeto" aria-label="Editar projeto">
               <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14" fill="currentColor"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l9.06-9.06.92.92L5.92 19.58zM20.71 7.04a1 1 0 0 0 0-1.41L18.37 3.3a1 1 0 0 0-1.41 0l-1.54 1.54 3.75 3.75 1.54-1.55z"/></svg>
             </button>
-            <button class="act-btn danger" data-action="del" data-id="${p.id}" title="Excluir projeto" aria-label="Excluir projeto">
-              <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14" fill="currentColor"><path d="M9 3h6l1 2h5v2H3V5h5l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9zm-1 12h12a2 2 0 0 0 2-2V8H4v11a2 2 0 0 0 2 2z"/></svg>
-            </button>
           </div>`
               : '<span style="color:#94a3b8">—</span>'
           }
@@ -4015,17 +4012,7 @@ function renderProjectsTable() {
     });
   });
 
-  body.querySelectorAll("button[data-action='del']").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (!confirm("Excluir projeto?")) return;
-      state.projects = state.projects.filter((p) => p.id !== btn.dataset.id);
-      state.routeProjects = normalizeRouteProjectIds((state.routeProjects || []).filter((projectId) => projectId !== btn.dataset.id));
-      state.routes = (state.routes || []).filter((item) => item.projectId !== btn.dataset.id);
-      expandedRouteProjects.delete(btn.dataset.id);
-      saveState();
-      renderAll();
-    });
-  });
+  // Exclusão de projeto agora é só pela janela interna (botão Excluir do dialog).
 }
 
 // ── Premiações (quadrantes dentro do dashboard de Rota) ──────────────
