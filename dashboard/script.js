@@ -1350,6 +1350,8 @@ function applyAuthVisibility() {
   if (btnCreateUser) btnCreateUser.hidden = !isAdmin;
   const usersNavBtn = document.querySelector('.nav-btn[data-tab="usuarios"]');
   if (usersNavBtn) usersNavBtn.hidden = !canSeeUsers;
+  const configNavBtn = document.querySelector('.nav-btn[data-tab="configuracoes"]');
+  if (configNavBtn) configNavBtn.hidden = !isAdmin;
 
   const readOnlyControls = [
     "btnNewProject",
@@ -1369,6 +1371,7 @@ function applyAuthVisibility() {
   if (timelineEnd) timelineEnd.disabled = !canEdit;
 
   if (user && currentTab === "usuarios" && !canSeeUsers) currentTab = "dashboard";
+  if (user && currentTab === "configuracoes" && !isAdmin) currentTab = "dashboard";
   currentTab = normalizeTabName(currentTab);
   persistCurrentTab();
   if (user) {
@@ -2141,9 +2144,8 @@ function renderRouteDashboard() {
   const isDestaqueStatus = (s) => isPremiado(s) || isNomeado(s) || isSelecionado(s);
   const premiacoesTotais = premiados + nomeados + selecionados;
   const filmesNaRota = routeProjects.length;
-  const finalizadas = (state.projects || []).filter((p) => /conclu/i.test(getProjectField(p, "status"))).length;
   const pct = (num, den) => (den > 0 ? Math.round((num / den) * 100) : 0);
-  const pctFilmes = pct(filmesNaRota, finalizadas);
+  const pctFilmes = pct(filmesNaRota, (state.projects || []).length);
   const pctOfEntries = (n) => pct(n, totalEntries);
 
   // Linha unificada: dados de rota + premiações, com indicadores de %
@@ -2160,7 +2162,7 @@ function renderRouteDashboard() {
     };
 
     highlightsEl.innerHTML = [
-      statTile({ number: filmesNaRota, label: "Filmes na Rota", pctLabel: `${pctFilmes}% das finalizadas`, cls: "route-highlight-teal" }),
+      statTile({ number: filmesNaRota, label: "Filmes na Rota", pctLabel: `${pctFilmes}% das produções`, cls: "route-highlight-teal" }),
       statTile({ number: totalEntries, label: "Total de Inscrições", pctLabel: "", cls: "route-highlight-indigo" }),
       statTile({ number: premiacoesTotais, label: "Premiações Totais", pctLabel: `${pctOfEntries(premiacoesTotais)}% das inscrições`, cls: "route-highlight-rose", highlight: "todos" }),
       statTile({ number: premiados, label: "Prêmios", pctLabel: `${pctOfEntries(premiados)}% das inscrições`, cls: "route-highlight-gold", highlight: "premiados" }),
@@ -3895,6 +3897,7 @@ function renderProjectsTools() {
 
 function renderProjectsTable() {
   const editable = canEditContent();
+  const showEditorLayout = editable || getCurrentUserRole() === "EDITOR ROTA";
   renderProjectViewTabs();
   const query = document.getElementById("projectSearch").value.trim().toLowerCase();
 
@@ -3958,12 +3961,12 @@ function renderProjectsTable() {
             ${yearLabel ? `<span class="project-title-meta-year">${escapeHtml(yearLabel)}</span>` : ""}
           ${editable ? "</button>" : "</span>"}
         </td>
-        <td>${editable ? inlineSelect("category", p.id, getProjectField(p, "category"), categories) : escapeHtml(getProjectField(p, "category") || "—")}</td>
-        <td>${editable ? inlineSelect("format", p.id, getProjectField(p, "format"), formats) : escapeHtml(getProjectField(p, "format") || "—")}</td>
-        <td>${editable ? inlineSelect("nature", p.id, getProjectField(p, "nature"), natures) : escapeHtml(getProjectField(p, "nature") || "—")}</td>
-        <td>${editable ? inlineSelect("duration", p.id, getProjectField(p, "duration"), durations) : escapeHtml(getProjectField(p, "duration") || "—")}</td>
+        <td>${showEditorLayout ? inlineSelect("category", p.id, getProjectField(p, "category"), categories, "", !editable) : escapeHtml(getProjectField(p, "category") || "—")}</td>
+        <td>${showEditorLayout ? inlineSelect("format", p.id, getProjectField(p, "format"), formats, "", !editable) : escapeHtml(getProjectField(p, "format") || "—")}</td>
+        <td>${showEditorLayout ? inlineSelect("nature", p.id, getProjectField(p, "nature"), natures, "", !editable) : escapeHtml(getProjectField(p, "nature") || "—")}</td>
+        <td>${showEditorLayout ? inlineSelect("duration", p.id, getProjectField(p, "duration"), durations, "", !editable) : escapeHtml(getProjectField(p, "duration") || "—")}</td>
         ${PROJECT_FLAG_FIELDS.map((field) => `<td>${renderFlagCell(p, field.key)}</td>`).join("")}
-        <td>${editable ? inlineSelect("status", p.id, getProjectField(p, "status"), statuses, badgeClass) : escapeHtml(getProjectField(p, "status") || "—")}</td>
+        <td>${showEditorLayout ? inlineSelect("status", p.id, getProjectField(p, "status"), statuses, badgeClass, !editable) : escapeHtml(getProjectField(p, "status") || "—")}</td>
         <td>
           ${
             editable
@@ -6833,7 +6836,7 @@ function updateProjectResultDisplay(totalSpent) {
   resultEl.classList.toggle("result-negative", result < 0);
 }
 
-function inlineSelect(field, projectId, currentValue, options, badgeClass = "") {
+function inlineSelect(field, projectId, currentValue, options, badgeClass = "", readonly = false) {
   const values = ["", ...options.filter((v) => String(v || "").trim())];
   const colorKey =
     field === "category"
@@ -6849,6 +6852,10 @@ function inlineSelect(field, projectId, currentValue, options, badgeClass = "") 
               : "";
   const hexColor = colorKey ? getConfigItemColor(colorKey, currentValue, 0, true) : "";
   const inlineStyle = hexColor ? ` style="background:${hexToRgba(hexColor, 0.16)};border-color:${hexToRgba(hexColor, 0.45)}"` : "";
+  if (readonly) {
+    const label = currentValue || "—";
+    return `<span class="isel isel-readonly${!currentValue || !hexColor ? " isel-nil" : ""}"${inlineStyle}>${escapeHtml(label)}</span>`;
+  }
   const cls = `isel${!currentValue || !hexColor ? " isel-nil" : ""}`;
   return `<select class="${cls}" data-action="inline-select" data-field="${field}" data-id="${projectId}"${inlineStyle}>
     ${values

@@ -2481,6 +2481,7 @@ tbody tr:hover {
 :root[data-theme="dark"] tbody tr:hover td a,
 :root[data-theme="dark"] tbody tr:hover td select,
 :root[data-theme="dark"] tbody tr:hover .isel,
+:root[data-theme="dark"] tbody tr:hover .isel-readonly,
 :root[data-theme="dark"] tbody tr:hover .project-title-main,
 :root[data-theme="dark"] tbody tr:hover .cell-link-edit {
   color: #1f2937 !important;
@@ -3216,6 +3217,23 @@ tbody tr:hover {
 /* Isel chevron arrow — neutral works on all pill colors */
 .isel {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%230D0D0D' fill-opacity='0.30'/%3E%3C/svg%3E");
+}
+
+.isel-readonly {
+  display: inline-block;
+  pointer-events: none;
+  cursor: default;
+  background-image: none;
+  border: 0.5px solid var(--pale);
+  border-radius: var(--r-sm);
+  padding: 7px 10px;
+  background: var(--white);
+  color: var(--black);
+  font: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .icon-btn {
