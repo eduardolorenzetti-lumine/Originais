@@ -8796,7 +8796,15 @@ async function upsertSecureUserInSupabase(user) {
     invited_at: sanitized.invitedAt || new Date().toISOString()
   };
   const { error } = await client.from(SUPABASE_USERS_TABLE).upsert(payload, { onConflict: "email" });
-  if (error) throw error;
+  if (error) {
+    const errorText = `${error.code || ""} ${error.message || ""} ${error.details || ""}`;
+    if (error.code === "23514" && /app_users_role_check/i.test(errorText)) {
+      throw new Error(
+        "O banco Supabase ainda não aceita LEITOR PROJETOS. Execute o arquivo dashboard/supabase_add_leitor_projetos.sql no SQL Editor do projeto Supabase e tente novamente."
+      );
+    }
+    throw error;
+  }
   return sanitized;
 }
 

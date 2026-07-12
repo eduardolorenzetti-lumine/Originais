@@ -363,6 +363,14 @@ CREATE INDEX projects_code_idx ON projects(code);
 
 ---
 
+### [2026-07-12] ~01h00 — BUG_FIX + DB_SCHEMA
+**O que foi feito:** Identificado que o Supabase remoto ainda estava com a `CHECK CONSTRAINT app_users_role_check` antiga, que rejeitava `LEITOR PROJETOS` com o erro `23514`.
+**Correção:** Criada a migração pontual `dashboard/supabase_add_leitor_projetos.sql`, que recria a constraint com todos os níveis atuais e normaliza aliases antigos. O dashboard também passou a exibir uma orientação específica quando essa migração ainda não foi aplicada, e o cache dos assets foi atualizado.
+**Pendência de aplicação:** Executar o SQL no SQL Editor do projeto Supabase usado pelo dashboard. Depois disso, criação e edição com `LEITOR PROJETOS` poderão ser salvas normalmente.
+**Feito por:** Codex
+
+---
+
 ## Estado Atual do Sistema (2026-05-22)
 
 | Métrica                  | Valor              |
