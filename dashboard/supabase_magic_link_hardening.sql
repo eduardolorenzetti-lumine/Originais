@@ -111,6 +111,8 @@ select distinct
     when 'ADMIN' then 'ADMIN'
     when 'EDITOR' then 'EDITOR'
     when 'EDITOR ROTA' then 'EDITOR ROTA'
+    when 'LEITOR PROJETO' then 'LEITOR PROJETOS'
+    when 'LEITOR DE PROJETOS' then 'LEITOR PROJETOS'
     when 'LEITOR PROJETOS' then 'LEITOR PROJETOS'
     else 'LEITOR'
   end as role,
@@ -145,6 +147,8 @@ set state = jsonb_set(
                 when 'ADMIN' then 'ADMIN'
                 when 'EDITOR' then 'EDITOR'
                 when 'EDITOR ROTA' then 'EDITOR ROTA'
+                when 'LEITOR PROJETO' then 'LEITOR PROJETOS'
+                when 'LEITOR DE PROJETOS' then 'LEITOR PROJETOS'
                 when 'LEITOR PROJETOS' then 'LEITOR PROJETOS'
                 else 'LEITOR'
               end,

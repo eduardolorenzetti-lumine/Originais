@@ -355,6 +355,14 @@ CREATE INDEX projects_code_idx ON projects(code);
 
 ---
 
+### [2026-07-12] ~00h45 — BUG_FIX
+**O que foi feito:** Corrigido o salvamento do nível `LEITOR PROJETOS` na criação e edição de usuários.
+**Motivo / Contexto:** O frontend aceitava o novo perfil, mas no fluxo com Supabase/Edge Function o registro podia voltar como `LEITOR`, mantendo acesso indevido a Dashboard, Cronograma e Rota.
+**Impacto:** Após criar/editar usuário, o sistema reenfileira o papel escolhido em `app_users`, envia `role`/`name` para a Edge Function de senha e valida no Supabase se o perfil salvo corresponde ao selecionado. O SQL de hardening também passa a normalizar aliases antigos (`LEITOR PROJETO`/`LEITOR DE PROJETOS`) para `LEITOR PROJETOS`.
+**Feito por:** Codex
+
+---
+
 ## Estado Atual do Sistema (2026-05-22)
 
 | Métrica                  | Valor              |

@@ -1860,18 +1860,20 @@ function bindDialog() {
           successMessage = "Senha alterada com sucesso.";
         } else if (payload.sendInvite) {
           // Novo usuário sem senha → enviar convite por e-mail
-          const { error } = await setUserPasswordAsAdmin(payload.email, "", { sendInvite: true });
+          const { error } = await setUserPasswordAsAdmin(payload.email, "", { sendInvite: true, role: payload.role, name: payload.name });
           if (error) throw new Error(error.message || String(error));
           successMessage = `Convite enviado para ${payload.email}!\n\nO usuário receberá um e-mail para definir sua senha.`;
         } else if (canManageUsers() && payload.password && !isSelf) {
           // Admin definindo/redefinindo senha de outro usuário
-          const { error } = await setUserPasswordAsAdmin(payload.email, payload.password);
+          const { error } = await setUserPasswordAsAdmin(payload.email, payload.password, { role: payload.role, name: payload.name });
           if (error) throw new Error(error.message || String(error));
+          await upsertSecureUserInSupabase(payload);
           successMessage = `Usuário salvo!\n\nE-mail: ${payload.email}\nSenha provisória: ${payload.password}\nFunção: ${payload.role}\n\nCompartilhe essas credenciais com o usuário.`;
         } else {
           successMessage = "Usuário salvo com sucesso.";
         }
 
+        await ensureSecureUserRolePersisted(payload);
         setUserFirstAccessPending(payload.email, Boolean(payload.firstAccessPending), payload.role);
         await refreshSecureUsersFromSupabase({ persist: true });
       } catch (error) {
@@ -8798,7 +8800,7 @@ async function upsertSecureUserInSupabase(user) {
   return sanitized;
 }
 
-async function setUserPasswordAsAdmin(targetEmail, password, { sendInvite = false } = {}) {
+async function setUserPasswordAsAdmin(targetEmail, password, { sendInvite = false, role = "", name = "" } = {}) {
   const { url, anonKey } = getSupabaseConfig();
   const accessToken = supabaseAuthSession?.access_token;
   if (!url || !accessToken) return { error: new Error("Sessão não encontrada. Faça login novamente.") };
@@ -8812,7 +8814,7 @@ async function setUserPasswordAsAdmin(targetEmail, password, { sendInvite = fals
         "Authorization": `Bearer ${accessToken}`,
         "apikey": anonKey
       },
-      body: JSON.stringify({ targetEmail, password, sendInvite })
+      body: JSON.stringify({ targetEmail, password, sendInvite, role: normalizeUserRole(role), name: String(name || "").trim() })
     });
     const text = await response.text().catch(() => "");
     let data = {};
@@ -8825,6 +8827,19 @@ async function setUserPasswordAsAdmin(targetEmail, password, { sendInvite = fals
   } catch (err) {
     console.error("[Originais] Edge Function fetch falhou:", err);
     return { error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+async function ensureSecureUserRolePersisted(user) {
+  const expectedRole = normalizeUserRole(user?.role);
+  if (!expectedRole || !normalizeUserEmail(user?.email)) return;
+  let savedUser = await fetchSecureCurrentUserFromSupabase(user.email);
+  if (normalizeUserRole(savedUser?.role) === expectedRole) return;
+
+  await upsertSecureUserInSupabase({ ...user, role: expectedRole });
+  savedUser = await fetchSecureCurrentUserFromSupabase(user.email);
+  if (normalizeUserRole(savedUser?.role) !== expectedRole) {
+    throw new Error(`O Supabase não confirmou o nível ${expectedRole}. Verifique a constraint/policy da tabela app_users.`);
   }
 }
 
