@@ -67,6 +67,7 @@ const BASE44_FILES = [
 const DEFAULT_ADMIN_EMAIL = "eduardo.lorenzetti@lumine.tv";
 const LEGACY_ADMIN_EMAIL = "admin@originais.com";
 const DEFAULT_ADMIN_PASSWORD = "admin123";
+const USER_ROLES = ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR PROJETOS", "LEITOR"];
 const SUPABASE_STATE_TABLE = "app_state";
 const SUPABASE_USERS_TABLE = "app_users";
 const SUPABASE_DEFAULT_STATE_ID = "originais-main";
@@ -430,7 +431,7 @@ function openTab(tab) {
     applyAuthVisibility();
     return;
   }
-  if (tab === "usuarios" && !canViewUsers()) tab = "dashboard";
+  if (!canViewTab(tab)) tab = getDefaultTabForCurrentUser();
   currentTab = normalizeTabName(tab);
   persistCurrentTab();
   document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
@@ -443,10 +444,10 @@ function bindGlobalActions() {
   document.querySelectorAll("[data-go-home]").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
-      currentTab = "dashboard";
+      currentTab = getDefaultTabForCurrentUser();
       persistCurrentTab();
       if (isAuthenticated()) {
-        openTab("dashboard");
+        openTab(currentTab);
         return;
       }
       applyAuthVisibility();
@@ -1241,9 +1242,31 @@ function getCurrentUserRole() {
     .toUpperCase();
 }
 
+function normalizeUserRole(role, fallback = "LEITOR") {
+  const normalized = String(role || "").trim().toUpperCase();
+  return USER_ROLES.includes(normalized) ? normalized : fallback;
+}
+
 function canManageUsers() {
   const role = getCurrentUserRole();
   return role === "ADMIN" || role.includes("ADMIN");
+}
+
+function isProjectReaderOnly() {
+  return getCurrentUserRole() === "LEITOR PROJETOS";
+}
+
+function getDefaultTabForCurrentUser() {
+  return isProjectReaderOnly() ? "projetos" : "dashboard";
+}
+
+function canViewTab(tab) {
+  const normalizedTab = normalizeTabName(tab);
+  if (!isAuthenticated()) return false;
+  if (isProjectReaderOnly()) return normalizedTab === "projetos";
+  if (normalizedTab === "usuarios") return canViewUsers();
+  if (normalizedTab === "configuracoes") return canManageUsers();
+  return true;
 }
 
 function canEditContent() {
@@ -1300,7 +1323,6 @@ function applyAuthVisibility() {
   const pendingAuth = isRemoteSupabaseAuthEnabled() && hasPendingSupabaseAuthCallback();
   const isAdmin = canManageUsers();
   const canEdit = canEditContent();
-  const canSeeUsers = canViewUsers();
 
   // Enquanto o Supabase Auth ainda não confirmou a sessão, mantém ambas as telas
   // ocultas e exibe o splash screen para evitar o flash da tela de login no refresh
@@ -1348,10 +1370,9 @@ function applyAuthVisibility() {
   }
   const btnCreateUser = document.getElementById("btnCreateUser");
   if (btnCreateUser) btnCreateUser.hidden = !isAdmin;
-  const usersNavBtn = document.querySelector('.nav-btn[data-tab="usuarios"]');
-  if (usersNavBtn) usersNavBtn.hidden = !canSeeUsers;
-  const configNavBtn = document.querySelector('.nav-btn[data-tab="configuracoes"]');
-  if (configNavBtn) configNavBtn.hidden = !isAdmin;
+  document.querySelectorAll(".nav-btn").forEach((btn) => {
+    btn.hidden = Boolean(user) && !canViewTab(btn.dataset.tab);
+  });
 
   const readOnlyControls = [
     "btnNewProject",
@@ -1370,8 +1391,7 @@ function applyAuthVisibility() {
   if (timelineStart) timelineStart.disabled = !canEdit;
   if (timelineEnd) timelineEnd.disabled = !canEdit;
 
-  if (user && currentTab === "usuarios" && !canSeeUsers) currentTab = "dashboard";
-  if (user && currentTab === "configuracoes" && !isAdmin) currentTab = "dashboard";
+  if (user && !canViewTab(currentTab)) currentTab = getDefaultTabForCurrentUser();
   currentTab = normalizeTabName(currentTab);
   persistCurrentTab();
   if (user) {
@@ -4918,7 +4938,7 @@ function collectUserForm() {
       id: existing?.id || email,
       name,
       email,
-      role: isAdmin ? (["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(role) ? role : "LEITOR") : String(existing?.role || current?.role || "LEITOR"),
+      role: isAdmin ? normalizeUserRole(role) : normalizeUserRole(existing?.role || current?.role),
       active: true,
       invitedAt: existing?.invitedAt || new Date().toISOString(),
       password: usePassword ? (password || "") : "",
@@ -4934,7 +4954,7 @@ function collectUserForm() {
     id,
     name,
     email,
-    role: isAdmin ? (["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(role) ? role : "LEITOR") : String(existing?.role || current?.role || "LEITOR"),
+    role: isAdmin ? normalizeUserRole(role) : normalizeUserRole(existing?.role || current?.role),
     passwordHash: password ? hashPassword(password) : String(existing?.passwordHash || ""),
     invitedAt: existing?.invitedAt || new Date().toISOString().slice(0, 10),
     firstAccessPending: password ? false : Boolean(existing?.firstAccessPending)
@@ -8053,9 +8073,7 @@ function sanitizeUserForState(user) {
     id: String(user.id || email).trim() || email,
     name: String(user.name || "").trim() || displayNameFromEmail(email),
     email,
-    role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(String(user.role || "").trim().toUpperCase())
-      ? String(user.role || "").trim().toUpperCase()
-      : "LEITOR",
+    role: normalizeUserRole(user.role),
     active: user.active !== false,
     invitedAt: String(user.invitedAt || user.invited_at || "").trim()
   };
@@ -8076,7 +8094,7 @@ function setUserFirstAccessPending(email, pending, role = "") {
     id: normalizedEmail,
     name: displayNameFromEmail(normalizedEmail),
     email: normalizedEmail,
-    role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(String(role || "").trim().toUpperCase()) ? String(role).trim().toUpperCase() : "LEITOR",
+    role: normalizeUserRole(role),
     active: true,
     invitedAt: new Date().toISOString(),
     firstAccessPending: Boolean(pending)
@@ -9113,7 +9131,7 @@ function mergeState(parsed) {
           id: user.id || uid(),
           name: String(user.name || "").trim(),
           email: String(user.email || "").trim().toLowerCase(),
-          role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(user.role) ? user.role : "LEITOR",
+          role: normalizeUserRole(user.role),
           passwordHash:
             String(user.passwordHash || "").trim() ||
             (
@@ -9168,7 +9186,7 @@ function seedState() {
           id: user.id || uid(),
           name: String(user.name || "").trim(),
           email: String(user.email || "").trim().toLowerCase(),
-          role: ["ADMIN", "EDITOR", "EDITOR ROTA", "LEITOR"].includes(user.role) ? user.role : "LEITOR",
+          role: normalizeUserRole(user.role),
           passwordHash:
             String(user.passwordHash || "").trim() ||
             (

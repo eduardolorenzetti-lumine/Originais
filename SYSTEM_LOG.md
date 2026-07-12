@@ -339,6 +339,14 @@ CREATE INDEX projects_code_idx ON projects(code);
 
 ---
 
+### [2026-07-12] ~00h00 — FEATURE
+**O que foi feito:** Criado novo nível de usuário `LEITOR PROJETOS`.
+**Motivo / Contexto:** Necessidade de um perfil com acesso restrito somente à leitura da página `Projetos`, sem acesso a Dashboard, Cronograma, Rota, Usuários ou Configurações.
+**Impacto:** O novo papel aparece no cadastro de usuários, é preservado nas rotinas de normalização/sincronização, força a navegação para a aba `Projetos` e oculta as demais abas para esse perfil. O script SQL de hardening também passa a aceitar `LEITOR PROJETOS` como role válido em `app_users`.
+**Feito por:** Codex
+
+---
+
 ## Estado Atual do Sistema (2026-05-22)
 
 | Métrica                  | Valor              |

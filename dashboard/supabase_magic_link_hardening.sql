@@ -9,12 +9,17 @@ create schema if not exists private;
 create table if not exists public.app_users (
   email text primary key,
   name text not null,
-  role text not null check (role in ('ADMIN', 'EDITOR', 'LEITOR')),
+  role text not null check (role in ('ADMIN', 'EDITOR', 'EDITOR ROTA', 'LEITOR PROJETOS', 'LEITOR')),
   active boolean not null default true,
   invited_at timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
+
+alter table public.app_users drop constraint if exists app_users_role_check;
+alter table public.app_users
+add constraint app_users_role_check
+check (role in ('ADMIN', 'EDITOR', 'EDITOR ROTA', 'LEITOR PROJETOS', 'LEITOR'));
 
 create or replace function private.set_updated_at()
 returns trigger
@@ -91,7 +96,7 @@ stable
 security definer
 set search_path = public, private
 as $$
-  select private.current_user_role() in ('ADMIN', 'EDITOR')
+  select private.current_user_role() in ('ADMIN', 'EDITOR', 'EDITOR ROTA')
 $$;
 
 alter table public.app_users enable row level security;
@@ -105,6 +110,8 @@ select distinct
   case upper(coalesce(trim(user_row->>'role'), 'LEITOR'))
     when 'ADMIN' then 'ADMIN'
     when 'EDITOR' then 'EDITOR'
+    when 'EDITOR ROTA' then 'EDITOR ROTA'
+    when 'LEITOR PROJETOS' then 'LEITOR PROJETOS'
     else 'LEITOR'
   end as role,
   true as active,
@@ -137,6 +144,8 @@ set state = jsonb_set(
               case upper(coalesce(trim(user_row->>'role'), 'LEITOR'))
                 when 'ADMIN' then 'ADMIN'
                 when 'EDITOR' then 'EDITOR'
+                when 'EDITOR ROTA' then 'EDITOR ROTA'
+                when 'LEITOR PROJETOS' then 'LEITOR PROJETOS'
                 else 'LEITOR'
               end,
             'active', true,
