@@ -347,6 +347,14 @@ CREATE INDEX projects_code_idx ON projects(code);
 
 ---
 
+### [2026-07-12] ~00h30 — BUG_FIX + UI
+**O que foi feito:** Corrigido o acesso do perfil `LEITOR PROJETOS` e ajustada a apresentação da página `Projetos` em modo somente leitura.
+**Motivo / Contexto:** Alguns registros utilizavam a variação singular `LEITOR PROJETO`, que caía no perfil genérico `LEITOR` e mantinha Dashboard, Cronograma e Rota acessíveis. Além disso, o perfil restrito exibia os campos da tabela como texto simples, diferente do layout visual padrão.
+**Impacto:** As variações singular e plural agora são tratadas como `LEITOR PROJETOS`; esse perfil inicia diretamente em `Projetos` e só mantém essa aba visível. Categoria, Formato, Natureza, Duração e Status passam a usar os mesmos pills coloridos do sistema, preservando a leitura sem liberar edição.
+**Feito por:** Codex
+
+---
+
 ## Estado Atual do Sistema (2026-05-22)
 
 | Métrica                  | Valor              |

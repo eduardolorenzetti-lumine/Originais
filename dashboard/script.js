@@ -804,7 +804,7 @@ function bindAuthActions() {
         if (signedIn) {
           clearLoginError();
           loginForm.reset();
-          openTab("dashboard");
+          openTab(getDefaultTabForCurrentUser());
           applyAuthVisibility();
           ensureAuthSurfaceVisible();
           renderAll();
@@ -831,7 +831,7 @@ function bindAuthActions() {
       const signedIn = await signInWithSupabasePassword(email, password);
       if (!signedIn) return;
       loginForm.reset();
-      openTab("dashboard");
+      openTab(getDefaultTabForCurrentUser());
       applyAuthVisibility();
       ensureAuthSurfaceVisible();
       renderAll();
@@ -859,7 +859,7 @@ function bindAuthActions() {
     persistSessionUser();
     clearLoginError();
     loginForm.reset();
-    openTab("dashboard");
+    openTab(getDefaultTabForCurrentUser());
     applyAuthVisibility();
     renderAll();
   });
@@ -1237,14 +1237,17 @@ function isAuthenticated() {
 
 function getCurrentUserRole() {
   const user = getCurrentUser();
-  return String(user?.role || "")
-    .trim()
-    .toUpperCase();
+  return normalizeUserRole(user?.role);
 }
 
 function normalizeUserRole(role, fallback = "LEITOR") {
   const normalized = String(role || "").trim().toUpperCase();
-  return USER_ROLES.includes(normalized) ? normalized : fallback;
+  const aliases = {
+    "LEITOR PROJETO": "LEITOR PROJETOS",
+    "LEITOR DE PROJETOS": "LEITOR PROJETOS"
+  };
+  const canonical = aliases[normalized] || normalized;
+  return USER_ROLES.includes(canonical) ? canonical : fallback;
 }
 
 function canManageUsers() {
@@ -3917,7 +3920,7 @@ function renderProjectsTools() {
 
 function renderProjectsTable() {
   const editable = canEditContent();
-  const showEditorLayout = editable || getCurrentUserRole() === "EDITOR ROTA";
+  const showEditorLayout = editable || getCurrentUserRole() === "EDITOR ROTA" || isProjectReaderOnly();
   renderProjectViewTabs();
   const query = document.getElementById("projectSearch").value.trim().toLowerCase();
 
