@@ -46,7 +46,7 @@
     <section class="stage">
       <div class="book-shell">
         <div id="book" class="is-cover" aria-label="Revista digital"></div>
-        <button class="cover-preview" id="cover-preview" type="button" aria-label="Abrir publicação"><img src="magazine-assets/leaf-01.png?v=2" alt="Capa de Buscai as coisas do alto"></button>
+        <button class="cover-preview" id="cover-preview" type="button" aria-label="Abrir publicação"><img src="magazine-assets/leaf-01.webp?v=3" alt="Capa de Buscai as coisas do alto"></button>
       </div>
       <div class="loading" id="loading">Carregando publicação…</div>
     </section>
@@ -60,7 +60,7 @@
     (() => {
       const totalPdfPages = 21;
       const leafImages = Array.from({ length: 40 }, (_, index) =>
-        `magazine-assets/leaf-${String(index + 1).padStart(2, '0')}.png?v=2`
+        `magazine-assets/leaf-${String(index + 1).padStart(2, '0')}.webp?v=3`
       );
       const bookElement = document.getElementById('book');
       const counter = document.getElementById('counter');
