@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Buscai as coisas do alto - Flipbook</title>
+  <style>
+    :root { color-scheme: dark; --ink: #f4efe7; --muted: #aaa39a; --line: rgba(255,255,255,.16); }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body { background: #151411; color: var(--ink); font-family: Georgia, 'Times New Roman', serif; }
+    .app { position: relative; width: 100%; height: 100dvh; display: grid; grid-template-rows: 48px minmax(0,1fr) 44px; isolation: isolate; }
+    .app::before { content: ''; position: absolute; inset: 0; z-index: -2; background: radial-gradient(circle at 50% 42%, #3a3630 0, #211f1b 43%, #11110f 100%); }
+    .topbar, .bottombar { z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+    .title, .counter { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .stage { position: relative; min-width: 0; min-height: 0; display: grid; place-items: center; padding: 4px 72px; }
+    .book-shell { position: relative; width: 100%; height: 100%; display: grid; place-items: center; }
+    #book { width: min(100%, calc((100dvh - 100px) * 1.4131)) !important; max-width: calc((100dvh - 100px) * 1.4131) !important; height: auto !important; max-height: 100%; }
+    #book.is-cover { opacity: 0; pointer-events: none; }
+    #book .stf__parent { margin: auto; }
+    #book .stf__block { box-shadow: 0 24px 60px rgba(0,0,0,.44); }
+    .cover-preview { position: absolute; z-index: 8; inset: 0; margin: auto; width: min(50%, 496px); height: 100%; max-height: 702px; padding: 0; border: 0; background: transparent; cursor: pointer; transition: transform .26s ease, opacity .16s ease; }
+    .cover-preview img { display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 24px 30px rgba(0,0,0,.42)); }
+    .cover-preview.move-right { transform: translateX(50%); }
+    .cover-preview.is-hidden { opacity: 0; pointer-events: none; }
+    .nav { position: fixed; top: 50%; z-index: 20; width: 48px; height: 80px; transform: translateY(-50%); border: 1px solid var(--line); border-radius: 7px; background: rgba(16,15,13,.58); color: var(--ink); cursor: pointer; font: 40px/1 Georgia, serif; backdrop-filter: blur(8px); transition: background .2s, opacity .2s, transform .2s; }
+    .nav:hover:not(:disabled), .nav:focus-visible:not(:disabled) { background: rgba(255,255,255,.16); outline: none; }
+    .nav:active:not(:disabled) { transform: translateY(-50%) scale(.96); }
+    .nav:disabled { opacity: .20; cursor: default; }
+    .prev { left: 18px; } .next { right: 18px; }
+    .hint { font: 12px/1.3 system-ui, -apple-system, sans-serif; color: var(--muted); }
+    .loading { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: #151411; color: var(--muted); font: 13px system-ui, sans-serif; letter-spacing: .08em; transition: opacity .3s; }
+    .loading.is-hidden { opacity: 0; pointer-events: none; }
+    @media (max-width: 700px) {
+      .stage { padding: 4px 46px; }
+      .nav { width: 38px; height: 62px; font-size: 32px; }
+      .prev { left: 7px; } .next { right: 7px; }
+      .title { font-size: 10px; }
+      .hint:last-child { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="Flipbook Buscai as coisas do alto">
+    <header class="topbar"><div class="title">Buscai as coisas do alto</div><div class="counter" id="counter">1 / 21</div></header>
+    <section class="stage">
+      <div class="book-shell">
+        <div id="book" class="is-cover" aria-label="Revista digital"></div>
+        <button class="cover-preview" id="cover-preview" type="button" aria-label="Abrir publicação"><img src="magazine-assets/leaf-01.png?v=2" alt="Capa de Buscai as coisas do alto"></button>
+      </div>
+      <div class="loading" id="loading">Carregando publicação…</div>
+    </section>
+    <button class="nav prev" id="prev" type="button" aria-label="Página anterior">‹</button>
+    <button class="nav next" id="next" type="button" aria-label="Próxima página">›</button>
+    <footer class="bottombar"><div class="hint">Arraste a folha ou use as teclas ← →</div><div class="hint">Magazine flip</div></footer>
+  </main>
+
+  <script src="page-flip.browser.js"></script>
+  <script>
+    (() => {
+      const totalPdfPages = 21;
+      const leafImages = Array.from({ length: 40 }, (_, index) =>
+        `magazine-assets/leaf-${String(index + 1).padStart(2, '0')}.png?v=2`
+      );
+      const bookElement = document.getElementById('book');
+      const counter = document.getElementById('counter');
+      const prev = document.getElementById('prev');
+      const next = document.getElementById('next');
+      const loading = document.getElementById('loading');
+      const coverPreview = document.getElementById('cover-preview');
+      let currentLeaf = 0;
+      let coverMode = true;
+      let coverTransition = false;
+
+      const pageFlip = new St.PageFlip(bookElement, {
+        width: 496,
+        height: 702,
+        size: 'stretch',
+        minWidth: 240,
+        maxWidth: 720,
+        minHeight: 340,
+        maxHeight: 1020,
+        maxShadowOpacity: 0.56,
+        showCover: true,
+        mobileScrollSupport: false,
+        usePortrait: true,
+        autoSize: true,
+        drawShadow: true,
+        flippingTime: 920,
+        clickEventForward: true,
+        useMouseEvents: true,
+        swipeDistance: 25,
+        showPageCorners: true,
+        disableFlipByClick: false
+      });
+
+      const pdfPageFromLeaf = leaf => leaf === 0 ? 1 : Math.min(totalPdfPages, Math.floor((leaf + 1) / 2) + 1);
+      const updateUi = leaf => {
+        currentLeaf = leaf;
+        const pdfPage = pdfPageFromLeaf(leaf);
+        counter.textContent = `${pdfPage} / ${totalPdfPages}`;
+        prev.disabled = leaf <= 0;
+        next.disabled = leaf >= leafImages.length - 1;
+      };
+
+      pageFlip.on('init', event => {
+        updateUi(event.data.page);
+        requestAnimationFrame(() => loading.classList.add('is-hidden'));
+      });
+      pageFlip.on('flip', event => updateUi(event.data));
+      pageFlip.on('changeState', event => {
+        document.body.dataset.flipState = event.data;
+        if (event.data === 'read' && currentLeaf === 0 && !coverMode) {
+          coverMode = true;
+          coverTransition = true;
+          coverPreview.classList.remove('is-hidden');
+          coverPreview.classList.add('move-right');
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            bookElement.classList.add('is-cover');
+            coverPreview.classList.remove('move-right');
+            window.setTimeout(() => { coverTransition = false; }, 280);
+          }));
+        }
+      });
+      pageFlip.loadFromImages(leafImages);
+
+      const openCover = () => {
+        if (!coverMode || coverTransition) return;
+        coverTransition = true;
+        coverMode = false;
+        coverPreview.classList.add('move-right');
+        window.setTimeout(() => {
+          bookElement.classList.remove('is-cover');
+          coverPreview.classList.add('is-hidden');
+          pageFlip.flipNext('top');
+          window.setTimeout(() => { coverTransition = false; }, 980);
+        }, 260);
+      };
+      coverPreview.addEventListener('click', openCover);
+      prev.addEventListener('click', () => pageFlip.flipPrev('top'));
+      next.addEventListener('click', () => currentLeaf === 0 ? openCover() : pageFlip.flipNext('top'));
+      document.addEventListener('keydown', event => {
+        if (event.key === 'ArrowLeft') pageFlip.flipPrev('top');
+        if (event.key === 'ArrowRight') currentLeaf === 0 ? openCover() : pageFlip.flipNext('top');
+      });
+    })();
+  </script>
+</body>
+</html>
